@@ -3,7 +3,7 @@
 ;; Copyright 2006 Qichen Huang
 ;;
 ;; Author: jasonal00@gmail.com
-;; Time-stamp: <2007-02-03 23:14:41>
+;; Time-stamp: <2007-02-04 23:24:24>
 ;; Version: v0.5
 ;; Keywords: 
 ;; X-URL: not distributed yet
@@ -28,8 +28,11 @@
 
 ;; Put this file into your load-path and the following into your ~/.emacs:
 ;;   (require 'unicad)
+;;
+;; It may take a few seconds to detect some long latin-1 or latin-2 files,
+;; you can byte-compile this file to speed up detecting process.
 
-;; Following coding systems are involved:
+;; Following coding systems can be auto detected:
 ;;  * (BOM detect)
 ;;  * (ascii)
 ;;  * multibyte coding systems:
@@ -69,6 +72,7 @@
 ;; to: http://www.mozilla.org/projects/intl/ChardetInterface.htm
 ;;
 ;; Changelog:
+;; v0.52 change singlebyte-dist-table to vectors, and some other changes
 ;; v0.50 add support for bulgarian and latin2, change prefix to unicad-*
 ;; v0.40 add support for single byte coding systems
 ;; v0.30 change variable and function names to ucad-* prefix
@@ -275,127 +279,172 @@
 
 (defvar unicad-singlebyte-best-guess nil)
 
+;; (defvar unicad-sb-dist-table-init
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
 (defvar unicad-sb-dist-table-init
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+      `[0 0 0 0 0 0 0])
 
 (defvar unicad-latin7-list 
   (unicad-chardet unicad-singlebyte-group-list 'unicad-latin7-prober))
-(defvar unicad-latin7-dist-table 
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+;; (defvar unicad-latin7-dist-table 
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
+(defvar unicad-latin7-dist-table
+      `[0 0 0 0 0 0 0]
+      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
 
 (defvar unicad-win1253-list 
   (unicad-chardet unicad-singlebyte-group-list 'unicad-win1253-prober))
+;; (defvar unicad-win1253-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
 (defvar unicad-win1253-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+      `[0 0 0 0 0 0 0]
+      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
 
 (defvar unicad-koi8r-list
   (unicad-chardet unicad-singlebyte-group-list 'unicad-koi8r-prober))
+;; (defvar unicad-koi8r-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
 (defvar unicad-koi8r-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+      `[0 0 0 0 0 0 0]
+      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
 
 (defvar unicad-win1251-list
   (unicad-chardet unicad-singlebyte-group-list 'unicad-win1251-prober))
+;; (defvar unicad-win1251-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
 (defvar unicad-win1251-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+      `[0 0 0 0 0 0 0]
+      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
 
 (defvar unicad-latin5-list
   (unicad-chardet unicad-singlebyte-group-list 'unicad-latin5-prober))
-(defvar unicad-latin5-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+;; (defvar unicad-latin5-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
+(defvar  unicad-latin5-dist-table
+       `[0 0 0 0 0 0 0]
+       "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
 
 (defvar unicad-ibm855-list
   (unicad-chardet unicad-singlebyte-group-list 'unicad-ibm855-prober))
-(defvar unicad-ibm855-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+;; (defvar unicad-ibm855-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
+(defvar  unicad-ibm855-dist-table
+       `[0 0 0 0 0 0 0]
+       "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
 
 (defvar unicad-latin5-bulgarian-list
   (unicad-chardet unicad-singlebyte-group-list 'unicad-latin5-bulgarian-prober))
+;; (defvar unicad-latin5-bulgarian-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
 (defvar unicad-latin5-bulgarian-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+      `[0 0 0 0 0 0 0]
+      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
+
 
 (defvar unicad-win1251-bulgarian-list
   (unicad-chardet unicad-singlebyte-group-list 'unicad-win1251-bulgarian-prober))
+;; (defvar unicad-win1251-bulgarian-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
+
 (defvar unicad-win1251-bulgarian-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+      `[0 0 0 0 0 0 0]
+      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
 
 (defvar unicad-win1255-list             ;; hebrew
   (unicad-chardet unicad-singlebyte-group-list 'unicad-win1255-prober))
-(defvar unicad-win1255-dist-table
-  (list
-   (cons 'total-seqs 0)
-   (cons 'total-char 0)
-   (cons 'freq-char 0)
-   (cons 'seq-counters [0 0 0 0])))
+;; (defvar unicad-win1255-dist-table
+;;   (list
+;;    (cons 'total-seqs 0)
+;;    (cons 'total-char 0)
+;;    (cons 'freq-char 0)
+;;    (cons 'seq-counters [0 0 0 0])))
 
-(defun unicad-sb-dist-table-reset (dist-table)
-  (setcdr (assoc 'total-seqs dist-table) 0)
-  (setcdr (assoc 'total-char dist-table) 0)
-  (setcdr (assoc 'freq-char  dist-table) 0)
-  (fillarray (cdr (assoc 'seq-counters dist-table)) 0))
+(defvar unicad-win1255-dist-table
+      `[0 0 0 0 0 0 0]
+      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
+
+;;(setq unicad-win1255-dist-table `[1 2 3 4 5 6 7])
+;;(fillarray unicad-win1255-dist-table 0)
+
+;; (defun unicad-sb-dist-table-reset (dist-table)
+;;   (setcdr (assoc 'total-seqs dist-table) 0)
+;;   (setcdr (assoc 'total-char dist-table) 0)
+;;   (setcdr (assoc 'freq-char  dist-table) 0)
+;;   (fillarray (cdr (assoc 'seq-counters dist-table)) 0))
+
+(defsubst unicad-sb-dist-table-reset (dist-table)
+  (fillarray dist-table 0))
 
 (defsubst unicad-sb-total-seqs (dist-table)
-  "return the total-seqs of a singlebyte distribution table"
-  (cdr (assoc 'total-seqs dist-table)))
+  (aref dist-table 0))
 
 (defsubst unicad-sb-total-seqs++ (dist-table)
-  (setcdr (assoc 'total-seqs dist-table) (1+ (unicad-sb-total-seqs dist-table))))
+  (aset dist-table 0 (1+ (unicad-sb-total-seqs dist-table))))
 
 (defsubst unicad-sb-total-char (dist-table)
   "return the total-char of a singlebyte distribution table"
-  (cdr (assoc 'total-char dist-table)))
-
+  (aref dist-table 1))
+  
 (defsubst unicad-sb-total-char++ (dist-table)
-  (setcdr (assoc 'total-char dist-table) (1+ (unicad-sb-total-char dist-table))))
-
+  (aset dist-table 1 (1+ (unicad-sb-total-char dist-table))))
+  
 (defsubst unicad-sb-freq-char (dist-table)
   "return the freq-char of a singlebyte distribution table"
-  (cdr (assoc 'freq-char dist-table)))
+  (aref dist-table 2))
 
 (defsubst unicad-sb-freq-char++ (dist-table)
-  (setcdr (assoc 'freq-char dist-table) (1+ (unicad-sb-freq-char dist-table))))
+  (aset dist-table 2 (1+ (unicad-sb-freq-char dist-table))))
 
 (defsubst unicad-sb-seq-counters (dist-table count)
   "return the total-seqs of a singlebyte distribution table"
-  (aref (cdr (assoc 'seq-counters dist-table)) count))
+  (aref dist-table (+ 3 count)))
 
 (defsubst unicad-sb-seq-counters++ (dist-table count)
-  (aset (cdr (assoc 'seq-counters dist-table)) count (1+ (unicad-sb-seq-counters dist-table count))))
+  (aset dist-table (+ 3 count) (1+ (unicad-sb-seq-counters dist-table count))))
 
 (defsubst unicad-sb-typ-positive-ration (model)
   (cdr (assoc 'typ-positive-ratio model)))
@@ -409,12 +458,13 @@
   (aref (cdr (assoc 'precedence-matrix model)) order))
 
 (defun unicad-singlebyte-group-prober (start end)
-  (setq debug-code 'starting-singlebyte)
+  (backward-word)
   (let ((lists unicad-singlebyte-group-list)
         (mState 'eDetecting)
         (bestConf 0.0)
+        (start (point))
         state chardet mBestGuess cf)
-    (setq unicad-singlebyte-best-guess '(nil 0.0))
+    (setq unicad-singlebyte-best-guess '(nil 0.0))    
     (while (and lists (eq mState 'eDetecting))
       (setq chardet (pop lists))
       (setq state (funcall (unicad-chardet-prober chardet)
@@ -438,42 +488,45 @@
 
 (defun unicad-singlebyte-prober (start end chardet model dist-table)
   "detect singlebyte charset"
-  (setq debug-code (list chardet dist-table))
   (goto-char start)
   (unicad-sb-dist-table-reset dist-table)
   (let ((mReversed nil)
         (mState 'eDetecting)
-        (meetMSB nil)
+        (meetMSB t)
+        (words 0)
         (order0 255)
         code cf order1)
     (while (and (< (point) end)
-                (eq mState 'eDetecting))
+                (eq mState 'eDetecting)
+                (< words 50))
       (setq code (char-after))
       (forward-char)
-      (if (>= code #x80) 
-          (setq meetMSB t)
-        (if (and (or (< code ?a) (> code ?z))
-                 (or (< code ?A) (> code ?Z))
-                 meetMSB)
-            (setq meetMSB nil)))
+      (when (and (>= code #x80) (not meetMSB))
+        (setq meetMSB t)
+        (forward-word)
+        (backward-word)
+        (setq code (char-after))
+        (forward-char)
+        (setq words (1+ words)))
+      (if (and (< code #x80) (looking-at "\\W"))
+          (setq meetMSB nil))
       (when meetMSB
         (setq order1 (unicad-sb-get-order model code))
         (if (< order1 unicad-symbol-cat-order)
             (unicad-sb-total-char++ dist-table))
-        (if (< order1 unicad-sample-size)
-            (progn
-              (unicad-sb-freq-char++ dist-table)
-              (if (< order0 unicad-sample-size)
-                  (progn
-                    (unicad-sb-total-seqs++ dist-table)
-                    (if (not mReversed)
-                        (unicad-sb-seq-counters++ dist-table 
-                                                (unicad-sb-precedence-matrix model (+ order1 (* order0 unicad-sample-size))))
-                      (unicad-sb-seq-counters++ dist-table 
-                                              (unicad-sb-precedence-matrix model (+ order0 (* order1 unicad-sample-size)))))
-                    ))))
+        (when (< order1 unicad-sample-size)
+          (unicad-sb-freq-char++ dist-table)
+          (when (< order0 unicad-sample-size)
+            (unicad-sb-total-seqs++ dist-table)
+            (if (not mReversed)
+                (unicad-sb-seq-counters++
+                 dist-table 
+                 (unicad-sb-precedence-matrix model (+ order1 (* order0 unicad-sample-size))))
+              (unicad-sb-seq-counters++
+               dist-table 
+               (unicad-sb-precedence-matrix model (+ order0 (* order1 unicad-sample-size)))))
+            ))
         (setq order0 order1)))
-    (setq debug-code mState)
     (setq cf (unicad-singlebyte-get-confidence model dist-table))
     (cond
      ((and (> (unicad-sb-total-seqs dist-table) unicad-sb-enough-rel-threshold) 
@@ -489,7 +542,6 @@
 
 (defun unicad-singlebyte-get-confidence (model dist-table)
   ;;positive approach
-  (setq debug-code (list 'sth-wrong-getting-confidence model))
   (let ((confidence 0.01)
         r)
     (when (> (unicad-sb-total-seqs dist-table) 0)
@@ -565,7 +617,6 @@
     (setq unicad-best-guess '(nil 0.0))
     (while (and lists (eq mState 'eDetecting))
       (setq chardet (pop lists))
-      (setq debug-code chardet)
       (setq state (funcall (unicad-chardet-prober chardet)
                            start end))
       (cond
