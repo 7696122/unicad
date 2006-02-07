@@ -3,8 +3,8 @@
 ;; Copyright 2006 Qichen Huang
 ;;
 ;; Author: jasonal00@gmail.com
-;; Time-stamp: <2007-02-04 23:24:24>
-;; Version: v0.5
+;; Time-stamp: <2007-02-06 23:32:12>
+;; Version: v0.6
 ;; Keywords: 
 ;; X-URL: not distributed yet
 
@@ -72,6 +72,7 @@
 ;; to: http://www.mozilla.org/projects/intl/ChardetInterface.htm
 ;;
 ;; Changelog:
+;; v0.60 delete singlebyte-model, replace it with more reasonable variables
 ;; v0.52 change singlebyte-dist-table to vectors, and some other changes
 ;; v0.50 add support for bulgarian and latin2, change prefix to unicad-*
 ;; v0.40 add support for single byte coding systems
@@ -232,14 +233,27 @@
 (defsubst unicad-chardet-prober (chardet)
   (aref chardet 2))
 
-(defsubst unicad-chardet-name (chardet)
-  (aref chardet 0))
+;; (defsubst unicad-chardet-name (chardet)
+;;   (aref chardet 0))
+
+(defsubst unicad-chardet-name (model)
+  (cdr (nth 0 model)))
+
+;;(unicad-chardet-name unicad-latin7-model)
 
 (defsubst unicad-chardet-set-confidence (chardet conf)
   (aset chardet 1 conf))
 
+;; (defsubst unicad-chardet-set-confidence (model conf)
+;;   (setcdr (nth 1 model) conf))
+
+;;(unicad-chardet-set-confidence unicad-latin7-model 0.02)
+
 (defsubst unicad-chardet-confidence (chardet)
   (aref chardet 1))
+
+;; (defsubst unicad-chardet-confidence (model)
+;;   (cdr (nth 1 model)))
 
 (defun unicad-chardet (group prober)
   "Search for detector by CODING"
@@ -264,18 +278,130 @@
 (defconst unicad-positive-cat (1- unicad-number-of-seq-cat))
 (defconst unicad-negative-cat 0)
 
+;; (defvar unicad-singlebyte-group-list
+;;   `([iso-8859-7   0 unicad-latin7-prober]
+;;     [windows-1253 0 unicad-win1253-prober]
+;;     [koi8-r       0 unicad-koi8r-prober]
+;;     [windows-1251 0 unicad-win1251-prober]
+;;     [iso-8859-5   0 unicad-latin5-prober]
+;;     [ibm855       0 unicad-ibm855-prober]
+;;     [iso-8859-5   0 unicad-latin5-bulgarian-prober]
+;;     [windows-1251 0 unicad-win1251-bulgarian-prober]
+;; ;;     [windows-1255 0 unicad-win1255-prober]
+;;     )
+;;   "([CODING-SYSTEM CONFIDENCE PROBER-FUNCTION]) ...")
+
 (defvar unicad-singlebyte-group-list
-  `([iso-8859-7   0 unicad-latin7-prober]
-    [windows-1253 0 unicad-win1253-prober]
-    [koi8-r       0 unicad-koi8r-prober]
-    [windows-1251 0 unicad-win1251-prober]
-    [iso-8859-5   0 unicad-latin5-prober]
-    [ibm855       0 unicad-ibm855-prober]
-    [iso-8859-5   0 unicad-latin5-bulgarian-prober]
-    [windows-1251 0 unicad-win1251-bulgarian-prober]
-;;     [windows-1255 0 unicad-win1255-prober]
-    )
-  "([CODING-SYSTEM CONFIDENCE PROBER-FUNCTION]) ...")
+  '(unicad-latin7-prober           
+    unicad-win1253-prober          
+    unicad-koi8r-prober            
+    unicad-win1251-prober          
+    unicad-latin5-prober           
+    unicad-ibm855-prober           
+    unicad-latin5-bulgarian-prober 
+    unicad-win1251-bulgarian-prober))
+
+;; (setq unicad-latin7-model
+;;       (list
+;;        (cons 'charset-name 'iso-8859-7)
+;;        (cons 'confidence 0)
+;;        (cons 'typ-positive-ratio 0.982851)
+;;        (cons 'char2order-map unicad-latin7-char2order-map)
+;;        (cons 'precedence-matrix unicad-greek-lang-model)
+;;        ))
+
+;; ;; (setq unicad-latin7-positive-ratio 0.982851)
+;; ;; (setq unicad-latin7-name 'iso-8859-7)
+
+;; (setq unicad-win1253-model
+;;       (list
+;;        (cons 'charset-name 'windows-1253)
+;;        (cons 'confidence 0)
+;;        (cons 'typ-positive-ratio 0.982851)
+;;        (cons 'char2order-map unicad-win1253-char2order-map)
+;;        (cons 'precedence-matrix unicad-greek-lang-model)
+;;        ))
+
+;; (setq unicad-koi8r-model
+;;       (list
+;;        (cons 'charset-name 'koi8-r)
+;;        (cons 'confidence 0)
+;;        (cons 'typ-positive-ratio 0.976601)
+;;        (cons 'char2order-map unicad-koi8r-char2order-map)
+;;        (cons 'precedence-matrix unicad-russian-lang-model)
+;;        ))
+
+;; (setq unicad-koi8r-model
+;;       (list
+;;        (cons 'charset-name 'koi8-r)
+;;        (cons 'confidence 0)
+;;        (cons 'typ-positive-ratio 0.976601)
+;;        (cons 'char2order-map unicad-koi8r-char2order-map)
+;;        (cons 'precedence-matrix unicad-russian-lang-model)
+;;        ))
+
+;; (setq unicad-win1251-model
+;;   (list
+;;    (cons 'charset-name 'windows-1251)
+;;    (cons 'confidence 0)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'char2order-map unicad-win1251-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    ))
+
+;; (setq unicad-latin5-model
+;;   (list
+;;    (cons 'charset-name 'iso-8859-5)
+;;    (cons 'confidence 0)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'char2order-map unicad-latin5-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    ))
+
+;; (setq unicad-maccyrillic-model
+;;   (list
+;;    (cons 'charset-name 'x-mac-cyrillic)
+;;    (cons 'confidence 0)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'char2order-map unicad-maccyrillic-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    ))
+
+;; (setq unicad-ibm866-model
+;;   (list
+;;    (cons 'charset-name 'ibm866)
+;;    (cons 'confidence 0.0)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'char2order-map unicad-ibm866-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    ))
+
+;; (setq unicad-ibm855-model
+;;   (list
+;;    (cons 'charset-name 'ibm855)
+;;    (cons 'confidence 0.0)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'char2order-map unicad-ibm855-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    ))
+
+;; (setq unicad-latin5-bulgarian-model
+;;   (list
+;;    (cons 'charset-name 'iso-8859-5)
+;;    (cons 'confidence 0.0)
+;;    (cons 'typ-positive-ratio 0.969392)
+;;    (cons 'char2order-map unicad-latin5-bulgarian-char2order-map)
+;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
+;;    ))
+
+;; (setq unicad-win1251-bulgarian-model
+;;   (list
+;;    (cons 'charset-name 'windows-1251)
+;;    (cons 'confidence 0.0)
+;;    (cons 'typ-positive-ratio 0.969392)
+;;    (cons 'char2order-map unicad-win1251-bulgarian-char2order-map)
+;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
+;;    ))
 
 (defvar unicad-singlebyte-best-guess nil)
 
@@ -443,19 +569,48 @@
   "return the total-seqs of a singlebyte distribution table"
   (aref dist-table (+ 3 count)))
 
-(defsubst unicad-sb-seq-counters++ (dist-table count)
-  (aset dist-table (+ 3 count) (1+ (unicad-sb-seq-counters dist-table count))))
+(defsubst unicad-sb-seq-counters++ (seq-count-table count)
+  (aset seq-count-table count (1+ (aref seq-count-table count))))
+;;(setq test-table [0 0 0 0])
 
-(defsubst unicad-sb-typ-positive-ration (model)
+(defsubst unicad-sb-typ-positive-ratio (model)
   (cdr (assoc 'typ-positive-ratio model)))
 
 (defsubst unicad-sb-get-order (model char)
   "look up the char2order-map"
   (aref(cdr (assoc 'char2order-map model)) char))
 
+;; (unicad-sb-get-order unicad-latin7-model 193)
+
 (defsubst unicad-sb-precedence-matrix (model order)
   "Get the sequence precedence from language model matrix"
   (aref (cdr (assoc 'precedence-matrix model)) order))
+
+;; (setq unicad-singlebyte-group-list
+;;       (list
+;;        unicad-latin7-model
+;;        unicad-win1253-model
+;;        unicad-koi8r-model
+;;        unicad-win1251-model
+;;        unicad-latin5-model
+;;        unicad-ibm855-model
+;;        unicad-latin5-bulgarian-model
+;;        unicad-win1251-bulgarian-model
+;;        ))
+
+;; (setq unicad-singlebyte-group-list
+;;       '(unicad-latin7-prober))
+
+(setq unicad-singlebyte-group-guess nil)
+
+(defsubst unicad-sb-get-name (model)
+  (cdr (nth 0 model)))
+
+(add-to-list 'unicad-singlebyte-group-guess (list 'chinese 0.3))
+(reverse unicad-singlebyte-group-guess)
+;; (setq model (pop unicad-singlebyte-group-list))
+(car model)
+;; (unicad-sb-get-order model 89)
 
 (defun unicad-singlebyte-group-prober (start end)
   (backward-word)
@@ -463,39 +618,51 @@
         (mState 'eDetecting)
         (bestConf 0.0)
         (start (point))
-        state chardet mBestGuess cf)
-    (setq unicad-singlebyte-best-guess '(nil 0.0))    
+        state prober mBestGuess cf)
+    (setq unicad-singlebyte-best-guess '(nil 0.0)
+          unicad-singlebyte-group-guess nil)
     (while (and lists (eq mState 'eDetecting))
-      (setq chardet (pop lists))
-      (setq state (funcall (unicad-chardet-prober chardet)
+      (setq prober (pop lists))
+      (setq state (funcall prober
                            start end))
       (cond
        ((eq state 'eFoundIt)
-        (setq mBestGuess (unicad-chardet-name chardet))
+        (setq mBestGuess (unicad-chardet-name model))
         (setq bestConf unicad--sure-yes)
         (setq mState 'eFoundIt))
        ((eq state 'eNotMe) nil)
        (t
-        (setq cf (unicad-chardet-confidence chardet))
+;;         (setq cf (unicad-chardet-confidence model)
+        (setq cf (cdr (nth 0 unicad-singlebyte-group-guess)))
         (if (> cf bestConf)
             (progn
-              (setq mBestGuess (unicad-chardet-name chardet))
+              ;;               (setq mBestGuess (unicad-chardet-name model))
+              (setq mBestGuess (car (nth 0 unicad-singlebyte-group-guess)))
               (setq bestConf cf))))))
+    (setq unicad-singlebyte-group-guess (reverse unicad-singlebyte-group-guess))
     (if (or (<= bestConf unicad--sure-no) (null mBestGuess))
         (setq mState 'eNotMe)
       (setq unicad-singlebyte-best-guess (list mBestGuess bestConf)))
     mState))
 
-(defun unicad-singlebyte-prober (start end chardet model dist-table)
+(defun unicad-singlebyte-prober (start end
+                                       charset-name
+                                       positive-ratio
+                                       char2order-map
+                                       lang-model)
   "detect singlebyte charset"
   (goto-char start)
-  (unicad-sb-dist-table-reset dist-table)
   (let ((mReversed nil)
         (mState 'eDetecting)
         (meetMSB t)
         (words 0)
         (order0 255)
+        (total-char 0)
+        (freq-char 0)
+        (total-seqs 0)
+        (seq-counters [0 0 0 0])
         code cf order1)
+    (fillarray seq-counters 0)
     (while (and (< (point) end)
                 (eq mState 'eDetecting)
                 (< words 50))
@@ -511,79 +678,177 @@
       (if (and (< code #x80) (looking-at "\\W"))
           (setq meetMSB nil))
       (when meetMSB
-        (setq order1 (unicad-sb-get-order model code))
+;;         (setq order1 (unicad-sb-get-order model code))
+        (setq order1 (aref char2order-map code))
         (if (< order1 unicad-symbol-cat-order)
-            (unicad-sb-total-char++ dist-table))
+            (setq total-char (1+ total-char)))
         (when (< order1 unicad-sample-size)
-          (unicad-sb-freq-char++ dist-table)
+          (setq freq-char (1+ freq-char))
           (when (< order0 unicad-sample-size)
-            (unicad-sb-total-seqs++ dist-table)
+            (setq total-seqs (1+ total-seqs))
             (if (not mReversed)
                 (unicad-sb-seq-counters++
-                 dist-table 
-                 (unicad-sb-precedence-matrix model (+ order1 (* order0 unicad-sample-size))))
+                 seq-counters
+                 (aref lang-model (+ order1 (* order0 unicad-sample-size))))
+;;                  (unicad-sb-precedence-matrix model (+ order1 (* order0 unicad-sample-size))))
               (unicad-sb-seq-counters++
-               dist-table 
-               (unicad-sb-precedence-matrix model (+ order0 (* order1 unicad-sample-size)))))
+               seq-counters
+               (aref lang-model (+ order0 (* order1 unicad-sample-size)))))
+;;                (unicad-sb-precedence-matrix model (+ order0 (* order1 unicad-sample-size)))))
             ))
         (setq order0 order1)))
-    (setq cf (unicad-singlebyte-get-confidence model dist-table))
+    (setq cf (unicad-singlebyte-get-confidence 
+              positive-ratio total-char freq-char total-seqs seq-counters))
     (cond
-     ((and (> (unicad-sb-total-seqs dist-table) unicad-sb-enough-rel-threshold) 
+     ((and (> total-seqs unicad-sb-enough-rel-threshold) 
            (> cf unicad-positive-shortcut-threshold))
       (setq mState 'eFoundIt)
-      (unicad-chardet-set-confidence chardet unicad--sure-yes))
+;;       (unicad-chardet-set-confidence model unicad--sure-yes)
+      (push (cons charset-name unicad--sure-yes) unicad-singlebyte-group-guess))
+;;       (push (cons (unicad-sb-get-name model) unicad--sure-yes) unicad-singlebyte-group-guess))
      ((< cf unicad-negative-shortcut-threshold)
       (setq mState 'eNotMe)
-      (unicad-chardet-set-confidence chardet unicad--sure-no))
+;;       (unicad-chardet-set-confidence model unicad--sure-no)
+      (push (cons charset-name unicad--sure-no) unicad-singlebyte-group-guess))
+;;       (push (cons (unicad-sb-get-name model) unicad--sure-no) unicad-singlebyte-group-guess))
      (t 
-      (unicad-chardet-set-confidence chardet cf)))
+;;       (unicad-chardet-set-confidence model cf)
+      (push (cons charset-name cf) unicad-singlebyte-group-guess)))
+;;       (push (cons (unicad-sb-get-name model) cf) unicad-singlebyte-group-guess)))
     mState))
 
-(defun unicad-singlebyte-get-confidence (model dist-table)
+(defun unicad-singlebyte-get-confidence (positive-ratio total-char freq-char total-seqs seq-counters)
   ;;positive approach
   (let ((confidence 0.01)
         r)
-    (when (> (unicad-sb-total-seqs dist-table) 0)
-      (setq r (/ (/ (float (unicad-sb-seq-counters dist-table unicad-positive-cat)) (float (unicad-sb-total-seqs dist-table)))
-                 (float (unicad-sb-typ-positive-ration model))))
-      (setq r (* r (/ (float (unicad-sb-freq-char dist-table))
-                      (float (unicad-sb-total-char dist-table)))))
+    (when (> total-seqs 0)
+      (setq r (/ (/ (float (aref seq-counters unicad-positive-cat)) (float total-seqs))
+                 (float positive-ratio)))
+      (setq r (* r (/ (float freq-char)
+                      (float total-char))))
       (setq confidence (min 0.99 r)))
     confidence))
 
 
+;; (defsubst unicad-latin7-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-latin7-list
+;;                           unicad-latin7-model unicad-latin7-dist-table))
+
 (defsubst unicad-latin7-prober (start end)
-  (unicad-singlebyte-prober start end unicad-latin7-list
-                          unicad-latin7-model unicad-latin7-dist-table))
+  (unicad-singlebyte-prober start end
+                            unicad-latin7-name
+                            unicad-latin7-positive-ratio
+                            unicad-latin7-char2order-map
+                            unicad-greek-lang-model))
+
+(defconst unicad-latin7-name 'iso-8859-7
+  "The charset name for latin7-prober")
+(defconst unicad-latin7-positive-ratio 0.982851)
+
+;; (defsubst unicad-win1253-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-win1253-list
+;;                           unicad-win1253-model unicad-win1253-dist-table))
 
 (defsubst unicad-win1253-prober (start end)
-  (unicad-singlebyte-prober start end unicad-win1253-list
-                          unicad-win1253-model unicad-win1253-dist-table))
+  (unicad-singlebyte-prober start end
+                            unicad-win1253-name
+                            unicad-win1253-positive-ratio
+                            unicad-win1253-char2order-map
+                            unicad-greek-lang-model))
+
+(defconst unicad-win1253-name 'windows-1253
+  "The charset name for win1253-prober")
+(defconst unicad-win1253-positive-ratio 0.982851)
+
+;; (defsubst unicad-koi8r-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-koi8r-list
+;;                           unicad-koi8r-model unicad-koi8r-dist-table))
 
 (defsubst unicad-koi8r-prober (start end)
-  (unicad-singlebyte-prober start end unicad-koi8r-list
-                          unicad-koi8r-model unicad-koi8r-dist-table))
+  (unicad-singlebyte-prober start end
+                            unicad-koi8r-name
+                            unicad-koi8r-positive-ratio
+                            unicad-koi8r-char2order-map
+                            unicad-russian-lang-model))
+
+(defconst unicad-koi8r-name 'koi8-r
+  "The charset name for koi8r-prober")
+(defconst unicad-koi8r-positive-ratio 0.976601)
+
+;; (defsubst unicad-win1251-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-win1251-list
+;;                           unicad-win1251-model unicad-win1251-dist-table))
 
 (defsubst unicad-win1251-prober (start end)
-  (unicad-singlebyte-prober start end unicad-win1251-list
-                          unicad-win1251-model unicad-win1251-dist-table))
+  (unicad-singlebyte-prober start end
+                            unicad-win1251-name
+                            unicad-win1251-positive-ratio
+                            unicad-win1251-char2order-map
+                            unicad-russian-lang-model))
+
+(defconst unicad-win1251-name 'windows-1251
+  "The charset name for win1251-prober")
+(defconst unicad-win1251-positive-ratio 0.976601)
+
+;; (defsubst unicad-latin5-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-latin5-list
+;;                           unicad-latin5-model unicad-latin5-dist-table))
 
 (defsubst unicad-latin5-prober (start end)
-  (unicad-singlebyte-prober start end unicad-latin5-list
-                          unicad-latin5-model unicad-latin5-dist-table))
+  (unicad-singlebyte-prober start end
+                            unicad-latin5-name
+                            unicad-latin5-positive-ratio
+                            unicad-latin5-char2order-map
+                            unicad-russian-lang-model))
 
-(defsubst unicad-ibm855-prober (start end)
-  (unicad-singlebyte-prober start end unicad-ibm855-list
-                          unicad-ibm855-model unicad-ibm855-dist-table))
+(defconst unicad-latin5-name 'iso-8859-5
+  "The charset name for latin5-prober")
+(defconst unicad-latin5-positive-ratio 0.976601)
+
+;; (defsubst unicad-ibm855-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-ibm855-list
+;;                           unicad-ibm855-model unicad-ibm855-dist-table))
+
+(defsubst unicad-imb855-prober (start end)
+  (unicad-singlebyte-prober start end
+                            unicad-imb855-name
+                            unicad-imb855-positive-ratio
+                            unicad-imb855-char2order-map
+                            unicad-russian-lang-model))
+
+(defconst unicad-imb855-name 'ibm855
+  "The charset name for imb855-prober")
+(defconst unicad-imb855-positive-ratio 0.976601)
+
+;; (defsubst unicad-latin5-bulgarian-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-latin5-bulgarian-list
+;;                           unicad-latin5-bulgarian-model unicad-latin5-bulgarian-dist-table))
 
 (defsubst unicad-latin5-bulgarian-prober (start end)
-  (unicad-singlebyte-prober start end unicad-latin5-bulgarian-list
-                          unicad-latin5-bulgarian-model unicad-latin5-bulgarian-dist-table))
+  (unicad-singlebyte-prober start end
+                            unicad-latin5-bulgarian-name
+                            unicad-latin5-bulgarian-positive-ratio
+                            unicad-latin5-bulgarian-char2order-map
+                            unicad-russian-lang-model))
+
+(defconst unicad-latin5-bulgarian-name 'iso-8859-5
+  "The charset name for latin5-bulgarian-prober")
+(defconst unicad-latin5-bulgarian-positive-ratio 0.976601)
+
+;; (defsubst unicad-win1251-bulgarian-prober (start end)
+;;   (unicad-singlebyte-prober start end unicad-win1251-bulgarian-list
+;;                           unicad-win1251-bulgarian-model unicad-win1251-bulgarian-dist-table))
 
 (defsubst unicad-win1251-bulgarian-prober (start end)
-  (unicad-singlebyte-prober start end unicad-win1251-bulgarian-list
-                          unicad-win1251-bulgarian-model unicad-win1251-bulgarian-dist-table))
+  (unicad-singlebyte-prober start end
+                            unicad-win1251-bulgarian-name
+                            unicad-win1251-bulgarian-positive-ratio
+                            unicad-win1251-bulgarian-char2order-map
+                            unicad-russian-lang-model))
+
+(defconst unicad-win1251-bulgarian-name 'windows-1251
+  "The charset name for win1251-bulgarian-prober")
+(defconst unicad-win1251-bulgarian-positive-ratio 0.969392)
 
 ;;}}}
 
@@ -883,10 +1148,10 @@
 ;; (defvar unicad-latin1-list
 ;;   `[latin-1 0 unicad-latin-prober])
 
-(defvar unicad-latin-best-guess '(latin-1 0.0))
+(defvar unicad-latin-best-guess '(windows-1252 0.0))
 
 (defvar unicad-latin1-guess
-  '(latin-1 0.0))
+  '(windows-1252 0.0))
 
 (defvar unicad-latin2-guess
   '(latin-2 0.0))
@@ -898,12 +1163,12 @@
             (unicad-latin-prober start end 
                                  unicad-latin1-class-table unicad-latin1-class-num unicad-latin1-model))
       (if (>= latin1-conf 0.5)
-          (setq unicad-latin-best-guess (list 'latin-1 latin1-conf))
+          (setq unicad-latin-best-guess (list 'windows-1252 latin1-conf))
         (setq latin2-conf
               (unicad-latin-prober start end 
                                    unicad-latin2-class-table unicad-latin2-class-num unicad-latin2-model))
         (if (> latin1-conf latin2-conf)
-            (setq unicad-latin-best-guess (list 'latin-1 latin1-conf))
+            (setq unicad-latin-best-guess (list 'windows-1252 latin1-conf))
           (setq unicad-latin-best-guess (list 'latin-2 latin2-conf)))))
     (cadr unicad-latin-best-guess)))
 
@@ -915,7 +1180,7 @@
     (fillarray mFreqCounter 0)
     (save-excursion
       (goto-char start)
-      (setq unicad-latin-best-guess '(latin-1 0.0))
+      (setq unicad-latin-best-guess '(windows-1252 0.0))
       (while (and (< (point) end)
                   (not (eq mState 'eNotMe))
                   (< (aref mFreqCounter 3) 2000))
@@ -3237,23 +3502,23 @@
    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
    ])
 
-(defvar unicad-latin7-model
-  (list
-   (cons 'char2order-map unicad-latin7-char2order-map)
-   (cons 'precedence-matrix unicad-greek-lang-model)
-   (cons 'typ-positive-ratio 0.982851)
-   (cons 'keep-english-letter nil) 
-   (cons 'charset-name 'iso-8859-7)
-   ))
+;; (defvar unicad-latin7-model
+;;   (list
+;;    (cons 'char2order-map unicad-latin7-char2order-map)
+;;    (cons 'precedence-matrix unicad-greek-lang-model)
+;;    (cons 'typ-positive-ratio 0.982851)
+;;    (cons 'keep-english-letter nil) 
+;;    (cons 'charset-name 'iso-8859-7)
+;;    ))
 
-(defvar unicad-win1253-model
-  (list
-   (cons 'char2order-map unicad-win1253-char2order-map) 
-   (cons 'precedence-matrix unicad-greek-lang-model) 
-   (cons 'typ-positive-ratio 0.982851)
-   (cons 'keep-english-letter nil) 
-   (cons 'charset-name 'windows-1253)
-   ))
+;; (defvar unicad-win1253-model
+;;   (list
+;;    (cons 'char2order-map unicad-win1253-char2order-map) 
+;;    (cons 'precedence-matrix unicad-greek-lang-model) 
+;;    (cons 'typ-positive-ratio 0.982851)
+;;    (cons 'keep-english-letter nil) 
+;;    (cons 'charset-name 'windows-1253)
+;;    ))
 
 ;;}}}
 
@@ -3521,59 +3786,59 @@
     ])
 
 
-(defvar unicad-koi8r-model
-  (list
-   (cons 'char2order-map unicad-koi8r-char2order-map)
-   (cons 'precedence-matrix unicad-russian-lang-model)
-   (cons 'typ-positive-ratio 0.976601)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'koi8-r)
-   ))
+;; (defvar unicad-koi8r-model
+;;   (list
+;;    (cons 'char2order-map unicad-koi8r-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'koi8-r)
+;;    ))
    
-(defvar unicad-win1251-model
-  (list
-   (cons 'char2order-map unicad-win1251-char2order-map)
-   (cons 'precedence-matrix unicad-russian-lang-model)
-   (cons 'typ-positive-ratio 0.976601)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'windows-1251)
-   ))
+;; (defvar unicad-win1251-model
+;;   (list
+;;    (cons 'char2order-map unicad-win1251-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'windows-1251)
+;;    ))
    
-(defvar unicad-latin5-model
-  (list
-   (cons 'char2order-map unicad-latin5-char2order-map)
-   (cons 'precedence-matrix unicad-russian-lang-model)
-   (cons 'typ-positive-ratio 0.976601)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'iso-8859-5)
-   ))
+;; (defvar unicad-latin5-model
+;;   (list
+;;    (cons 'char2order-map unicad-latin5-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'iso-8859-5)
+;;    ))
    
-(defvar unicad-maccyrillic-model
-  (list
-   (cons 'char2order-map unicad-maccyrillic-char2order-map)
-   (cons 'precedence-matrix unicad-russian-lang-model)
-   (cons 'typ-positive-ratio 0.976601)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'x-mac-cyrillic)
-   ))
+;; (defvar unicad-maccyrillic-model
+;;   (list
+;;    (cons 'char2order-map unicad-maccyrillic-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'x-mac-cyrillic)
+;;    ))
    
-(defvar unicad-ibm866-model
-  (list
-   (cons 'char2order-map unicad-ibm866-char2order-map)
-   (cons 'precedence-matrix unicad-russian-lang-model)
-   (cons 'typ-positive-ratio 0.976601)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'ibm866)
-   ))
+;; (defvar unicad-ibm866-model
+;;   (list
+;;    (cons 'char2order-map unicad-ibm866-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'ibm866)
+;;    ))
 
-(defvar unicad-ibm855-model
-  (list
-   (cons 'char2order-map unicad-ibm855-char2order-map)
-   (cons 'precedence-matrix unicad-russian-lang-model)
-   (cons 'typ-positive-ratio 0.976601)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'ibm855)
-   ))
+;; (defvar unicad-ibm855-model
+;;   (list
+;;    (cons 'char2order-map unicad-ibm855-char2order-map)
+;;    (cons 'precedence-matrix unicad-russian-lang-model)
+;;    (cons 'typ-positive-ratio 0.976601)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'ibm855)
+;;    ))
 
 
 ;;}}}
@@ -3770,21 +4035,21 @@
     0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 
     ])
 
-(defvar unicad-latin5-bulgarian-model
-  (list
-   (cons 'char2order-map unicad-latin5-bulgarian-char2order-map)
-   (cons 'precedence-matrix unicad-bulgarian-lang-model)
-   (cons 'typ-positive-ratio 0.969392)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'iso-8859-5)))
+;; (defvar unicad-latin5-bulgarian-model
+;;   (list
+;;    (cons 'char2order-map unicad-latin5-bulgarian-char2order-map)
+;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
+;;    (cons 'typ-positive-ratio 0.969392)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'iso-8859-5)))
 
-(defvar unicad-win1251-bulgarian-model
-  (list
-   (cons 'char2order-map unicad-win1251-bulgarian-char2order-map)
-   (cons 'precedence-matrix unicad-bulgarian-lang-model)
-   (cons 'typ-positive-ratio 0.969392)
-   (cons 'keep-english-letter nil)
-   (cons 'charset-name 'windows-1251)))
+;; (defvar unicad-win1251-bulgarian-model
+;;   (list
+;;    (cons 'char2order-map unicad-win1251-bulgarian-char2order-map)
+;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
+;;    (cons 'typ-positive-ratio 0.969392)
+;;    (cons 'keep-english-letter nil)
+;;    (cons 'charset-name 'windows-1251)))
 
 ;;;}}}
 
