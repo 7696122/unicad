@@ -1,12 +1,12 @@
 ;;; unicad.el --- an elisp port of Mozilla Universal Charset Auto Detector
 
-;; Copyright 2006 Qichen Huang
+;; Copyright (C) 2006, 2007 Qichen Huang
 ;;
-;; Author: jasonal00@gmail.com
-;; Time-stamp: <2007-02-06 23:32:12>
-;; Version: v0.6
-;; Keywords: 
-;; X-URL: not distributed yet
+;; Author: Qichen Huang <jasonal00@gmail.com>
+;; Time-stamp: <2007-05-10 00:06:20>
+;; Version: v0.62
+;; Keywords: coding-system, auto-coding-functions
+;; X-URL: http://jasonal.blogspot.com/2007/02/unicadel.html
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -36,13 +36,15 @@
 ;;  * (BOM detect)
 ;;  * (ascii)
 ;;  * multibyte coding systems:
-;;    - utf-8
 ;;    - gb18030 (gb2312)
 ;;    - big5
 ;;    - sjis
 ;;    - euc-jp
 ;;    - euc-kr
 ;;    - euc-tw
+;;    - utf-8
+;;    - utf-16le
+;;    - utf-16be
 ;;  * singlebyte coding systems:
 ;;    - greek 
 ;;      > iso-8859-7 
@@ -55,23 +57,32 @@
 ;;  - bulgarian
 ;;      >iso-8859-5
 ;;      >windows-1251
+;;  - sjis (singlebyte only)
 ;;  * latin-1
 ;;  * latin-2
 
 ;; Follows are planned to be involved in next version:
 ;;  - hebrew
-;;  - hungarian
 ;;  - thai
 ;;  - x-mac-cyrillic
 ;;  - ibm866
-;;  - iso-2022
+;;  - iso-2022 (Emacs itself can detect iso-2022-cn -jp and -kr corretly)
 ;;  - hz
 
-;; This is an elisp port of Universal Charset Detector. For more
-;; information about Mozilla Universal Charset Detector, please refer
-;; to: http://www.mozilla.org/projects/intl/ChardetInterface.htm
+;; If some one can provide a language model of japanese katakana (for
+;; detecting sjis halfwidth katakana only files), please contact me.
+;; Thanks!
+
+;; This is an elisp port of Universal Charset Detector. However, some
+;; small changes have been made to make the dectection more
+;; comfortable and quickly in Emacs. For more information about
+;; Mozilla Universal Charset Detector, please refer to:
+;; http://www.mozilla.org/projects/intl/ChardetInterface.htm
 ;;
-;; Changelog:
+;; Changelog
+;; v0.62 allow esc(0x1B) as legal value in utf-8, gb18030, sjis, big5, euckr
+;; v0.61 add a unicad-quick-multibyte-words, increase unicad-quick-size to 500
+;;       add support for sjis single byte only katakana files
 ;; v0.60 delete singlebyte-model, replace it with more reasonable variables
 ;; v0.52 change singlebyte-dist-table to vectors, and some other changes
 ;; v0.50 add support for bulgarian and latin2, change prefix to unicad-*
@@ -83,11 +94,13 @@
 ;;; Code:
 
 
-(provide 'unicad)
+;;(provide 'unicad)
 (eval-when-compile
   (require 'cl))
 
-(defvar unicad-quick-size 100)
+(defvar unicad-quick-size 500)
+(defvar unicad-quick-multibyte-words  50)
+(defvar unicad-quick-singlebyte-words 50)
 (defvar unicad-max-size 10000)
 (defvar unicad-default-coding-system nil)
 
@@ -96,8 +109,11 @@
 (defvar unicad-minimum-data-threshold 2)
 (defvar unicad-minimum-size-threshold 10)
 
+(defvar unicad-prefer nil "set preference encoding system")
+
 (defconst unicad--sure-yes 0.99)
 (defconst unicad--sure-no 0.01)
+
 
 
 ;;{{{ Auto Coding Function
@@ -128,22 +144,28 @@
                        (or (= code1 #x1B) ;; ESC char
                            (and (= code1 ?{ ) (= code0 ?~ )))) ;; HZ "~{"
                   ;; found escape character or HZ "~{"
-                  (setq input-state 'eEscAscii))
+                  (setq input-state 'eEscAscii
+                        start (1- (point))))
               (setq code0 code1)))
           (cond
-           ((eq input-state 'eEscAscii))
+           ((eq input-state 'eEscAscii)
+;;             (unicad-esc-group-prober (point-min) end)
+            )
            ((eq input-state 'eHighbyte)
             (if (> (- end start) unicad-quick-size)
                 (setq quick-start start
                       quick-end (+ unicad-quick-size start))
               (setq quick-start start
                     quick-end end))
-            (let ((maxConfidence 0.0))
+            (let ((maxConfidence 0.0)
+                  quick-status)
               (cond
-               ((eq (unicad-multibyte-group-prober quick-start quick-end) 'eFoundIt)
+               ((eq (setq quick-status
+                          (unicad-multibyte-group-prober quick-start quick-end)) 'eFoundIt)
                 (setq prober-result (car unicad-best-guess))
                 (setq maxConfidence unicad--sure-yes))
-               ((and (/= quick-end end)
+               ((and (not (eq quick-status 'eNotMe))
+                     (/= quick-end end)
                      (eq (unicad-multibyte-group-prober start end) 'eFoundIt))
                 (setq prober-result (car unicad-best-guess))
                 (setq maxConfidence unicad--sure-yes))
@@ -178,6 +200,8 @@
 
 ;;{{{ BOM detector
 (defun unicad-bom-detect ()
+  "BOM detector. For detecting the signature of utf-8, utf-16le,
+utf-16be ..."
   (save-excursion
     (goto-char (point-min))
     (setq debug-code 'bom-detecting)
@@ -231,29 +255,20 @@
 
 ;; some chardet functions
 (defsubst unicad-chardet-prober (chardet)
+  "fetch the multibyte chardet prober function"
   (aref chardet 2))
 
-;; (defsubst unicad-chardet-name (chardet)
-;;   (aref chardet 0))
-
-(defsubst unicad-chardet-name (model)
-  (cdr (nth 0 model)))
-
-;;(unicad-chardet-name unicad-latin7-model)
+(defsubst unicad-chardet-name (chardet)
+  "get the coding system name of a multibyte chardet"
+  (aref chardet 0))
 
 (defsubst unicad-chardet-set-confidence (chardet conf)
+  "set the confidence (probability) of a multibyte chardet"
   (aset chardet 1 conf))
 
-;; (defsubst unicad-chardet-set-confidence (model conf)
-;;   (setcdr (nth 1 model) conf))
-
-;;(unicad-chardet-set-confidence unicad-latin7-model 0.02)
-
 (defsubst unicad-chardet-confidence (chardet)
+  "get the confidence"
   (aref chardet 1))
-
-;; (defsubst unicad-chardet-confidence (model)
-;;   (cdr (nth 1 model)))
 
 (defun unicad-chardet (group prober)
   "Search for detector by CODING"
@@ -278,19 +293,6 @@
 (defconst unicad-positive-cat (1- unicad-number-of-seq-cat))
 (defconst unicad-negative-cat 0)
 
-;; (defvar unicad-singlebyte-group-list
-;;   `([iso-8859-7   0 unicad-latin7-prober]
-;;     [windows-1253 0 unicad-win1253-prober]
-;;     [koi8-r       0 unicad-koi8r-prober]
-;;     [windows-1251 0 unicad-win1251-prober]
-;;     [iso-8859-5   0 unicad-latin5-prober]
-;;     [ibm855       0 unicad-ibm855-prober]
-;;     [iso-8859-5   0 unicad-latin5-bulgarian-prober]
-;;     [windows-1251 0 unicad-win1251-bulgarian-prober]
-;; ;;     [windows-1255 0 unicad-win1255-prober]
-;;     )
-;;   "([CODING-SYSTEM CONFIDENCE PROBER-FUNCTION]) ...")
-
 (defvar unicad-singlebyte-group-list
   '(unicad-latin7-prober           
     unicad-win1253-prober          
@@ -299,346 +301,51 @@
     unicad-latin5-prober           
     unicad-ibm855-prober           
     unicad-latin5-bulgarian-prober 
-    unicad-win1251-bulgarian-prober))
-
-;; (setq unicad-latin7-model
-;;       (list
-;;        (cons 'charset-name 'iso-8859-7)
-;;        (cons 'confidence 0)
-;;        (cons 'typ-positive-ratio 0.982851)
-;;        (cons 'char2order-map unicad-latin7-char2order-map)
-;;        (cons 'precedence-matrix unicad-greek-lang-model)
-;;        ))
-
-;; ;; (setq unicad-latin7-positive-ratio 0.982851)
-;; ;; (setq unicad-latin7-name 'iso-8859-7)
-
-;; (setq unicad-win1253-model
-;;       (list
-;;        (cons 'charset-name 'windows-1253)
-;;        (cons 'confidence 0)
-;;        (cons 'typ-positive-ratio 0.982851)
-;;        (cons 'char2order-map unicad-win1253-char2order-map)
-;;        (cons 'precedence-matrix unicad-greek-lang-model)
-;;        ))
-
-;; (setq unicad-koi8r-model
-;;       (list
-;;        (cons 'charset-name 'koi8-r)
-;;        (cons 'confidence 0)
-;;        (cons 'typ-positive-ratio 0.976601)
-;;        (cons 'char2order-map unicad-koi8r-char2order-map)
-;;        (cons 'precedence-matrix unicad-russian-lang-model)
-;;        ))
-
-;; (setq unicad-koi8r-model
-;;       (list
-;;        (cons 'charset-name 'koi8-r)
-;;        (cons 'confidence 0)
-;;        (cons 'typ-positive-ratio 0.976601)
-;;        (cons 'char2order-map unicad-koi8r-char2order-map)
-;;        (cons 'precedence-matrix unicad-russian-lang-model)
-;;        ))
-
-;; (setq unicad-win1251-model
-;;   (list
-;;    (cons 'charset-name 'windows-1251)
-;;    (cons 'confidence 0)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'char2order-map unicad-win1251-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    ))
-
-;; (setq unicad-latin5-model
-;;   (list
-;;    (cons 'charset-name 'iso-8859-5)
-;;    (cons 'confidence 0)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'char2order-map unicad-latin5-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    ))
-
-;; (setq unicad-maccyrillic-model
-;;   (list
-;;    (cons 'charset-name 'x-mac-cyrillic)
-;;    (cons 'confidence 0)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'char2order-map unicad-maccyrillic-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    ))
-
-;; (setq unicad-ibm866-model
-;;   (list
-;;    (cons 'charset-name 'ibm866)
-;;    (cons 'confidence 0.0)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'char2order-map unicad-ibm866-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    ))
-
-;; (setq unicad-ibm855-model
-;;   (list
-;;    (cons 'charset-name 'ibm855)
-;;    (cons 'confidence 0.0)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'char2order-map unicad-ibm855-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    ))
-
-;; (setq unicad-latin5-bulgarian-model
-;;   (list
-;;    (cons 'charset-name 'iso-8859-5)
-;;    (cons 'confidence 0.0)
-;;    (cons 'typ-positive-ratio 0.969392)
-;;    (cons 'char2order-map unicad-latin5-bulgarian-char2order-map)
-;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
-;;    ))
-
-;; (setq unicad-win1251-bulgarian-model
-;;   (list
-;;    (cons 'charset-name 'windows-1251)
-;;    (cons 'confidence 0.0)
-;;    (cons 'typ-positive-ratio 0.969392)
-;;    (cons 'char2order-map unicad-win1251-bulgarian-char2order-map)
-;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
-;;    ))
+    unicad-win1251-bulgarian-prober
+    unicad-sjis-sb-prober)
+  "a list of singlebyte prober functions")
 
 (defvar unicad-singlebyte-best-guess nil)
 
-;; (defvar unicad-sb-dist-table-init
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-sb-dist-table-init
-      `[0 0 0 0 0 0 0])
-
-(defvar unicad-latin7-list 
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-latin7-prober))
-;; (defvar unicad-latin7-dist-table 
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-latin7-dist-table
-      `[0 0 0 0 0 0 0]
-      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-(defvar unicad-win1253-list 
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-win1253-prober))
-;; (defvar unicad-win1253-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-win1253-dist-table
-      `[0 0 0 0 0 0 0]
-      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-(defvar unicad-koi8r-list
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-koi8r-prober))
-;; (defvar unicad-koi8r-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-koi8r-dist-table
-      `[0 0 0 0 0 0 0]
-      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-(defvar unicad-win1251-list
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-win1251-prober))
-;; (defvar unicad-win1251-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-win1251-dist-table
-      `[0 0 0 0 0 0 0]
-      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-(defvar unicad-latin5-list
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-latin5-prober))
-;; (defvar unicad-latin5-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar  unicad-latin5-dist-table
-       `[0 0 0 0 0 0 0]
-       "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-(defvar unicad-ibm855-list
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-ibm855-prober))
-;; (defvar unicad-ibm855-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar  unicad-ibm855-dist-table
-       `[0 0 0 0 0 0 0]
-       "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-(defvar unicad-latin5-bulgarian-list
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-latin5-bulgarian-prober))
-;; (defvar unicad-latin5-bulgarian-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-latin5-bulgarian-dist-table
-      `[0 0 0 0 0 0 0]
-      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-
-(defvar unicad-win1251-bulgarian-list
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-win1251-bulgarian-prober))
-;; (defvar unicad-win1251-bulgarian-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-win1251-bulgarian-dist-table
-      `[0 0 0 0 0 0 0]
-      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-(defvar unicad-win1255-list             ;; hebrew
-  (unicad-chardet unicad-singlebyte-group-list 'unicad-win1255-prober))
-;; (defvar unicad-win1255-dist-table
-;;   (list
-;;    (cons 'total-seqs 0)
-;;    (cons 'total-char 0)
-;;    (cons 'freq-char 0)
-;;    (cons 'seq-counters [0 0 0 0])))
-
-(defvar unicad-win1255-dist-table
-      `[0 0 0 0 0 0 0]
-      "[TOTAL-SEQS TOTAL-CHAR FREQ-CHAR SEQ-COUNTERS(4) ]")
-
-;;(setq unicad-win1255-dist-table `[1 2 3 4 5 6 7])
-;;(fillarray unicad-win1255-dist-table 0)
-
-;; (defun unicad-sb-dist-table-reset (dist-table)
-;;   (setcdr (assoc 'total-seqs dist-table) 0)
-;;   (setcdr (assoc 'total-char dist-table) 0)
-;;   (setcdr (assoc 'freq-char  dist-table) 0)
-;;   (fillarray (cdr (assoc 'seq-counters dist-table)) 0))
+(defvar unicad-singlebyte-group-guess nil)
 
 (defsubst unicad-sb-dist-table-reset (dist-table)
   (fillarray dist-table 0))
 
-(defsubst unicad-sb-total-seqs (dist-table)
-  (aref dist-table 0))
-
-(defsubst unicad-sb-total-seqs++ (dist-table)
-  (aset dist-table 0 (1+ (unicad-sb-total-seqs dist-table))))
-
-(defsubst unicad-sb-total-char (dist-table)
-  "return the total-char of a singlebyte distribution table"
-  (aref dist-table 1))
-  
-(defsubst unicad-sb-total-char++ (dist-table)
-  (aset dist-table 1 (1+ (unicad-sb-total-char dist-table))))
-  
-(defsubst unicad-sb-freq-char (dist-table)
-  "return the freq-char of a singlebyte distribution table"
-  (aref dist-table 2))
-
-(defsubst unicad-sb-freq-char++ (dist-table)
-  (aset dist-table 2 (1+ (unicad-sb-freq-char dist-table))))
-
-(defsubst unicad-sb-seq-counters (dist-table count)
-  "return the total-seqs of a singlebyte distribution table"
-  (aref dist-table (+ 3 count)))
-
 (defsubst unicad-sb-seq-counters++ (seq-count-table count)
   (aset seq-count-table count (1+ (aref seq-count-table count))))
-;;(setq test-table [0 0 0 0])
-
-(defsubst unicad-sb-typ-positive-ratio (model)
-  (cdr (assoc 'typ-positive-ratio model)))
-
-(defsubst unicad-sb-get-order (model char)
-  "look up the char2order-map"
-  (aref(cdr (assoc 'char2order-map model)) char))
-
-;; (unicad-sb-get-order unicad-latin7-model 193)
-
-(defsubst unicad-sb-precedence-matrix (model order)
-  "Get the sequence precedence from language model matrix"
-  (aref (cdr (assoc 'precedence-matrix model)) order))
-
-;; (setq unicad-singlebyte-group-list
-;;       (list
-;;        unicad-latin7-model
-;;        unicad-win1253-model
-;;        unicad-koi8r-model
-;;        unicad-win1251-model
-;;        unicad-latin5-model
-;;        unicad-ibm855-model
-;;        unicad-latin5-bulgarian-model
-;;        unicad-win1251-bulgarian-model
-;;        ))
-
-;; (setq unicad-singlebyte-group-list
-;;       '(unicad-latin7-prober))
-
-(setq unicad-singlebyte-group-guess nil)
 
 (defsubst unicad-sb-get-name (model)
   (cdr (nth 0 model)))
 
-(add-to-list 'unicad-singlebyte-group-guess (list 'chinese 0.3))
-(reverse unicad-singlebyte-group-guess)
-;; (setq model (pop unicad-singlebyte-group-list))
-(car model)
-;; (unicad-sb-get-order model 89)
-
 (defun unicad-singlebyte-group-prober (start end)
-  (backward-word)
+  "extract the singlebyte chardet prober functions from
+`unicad-singlebyte-group-list', compare the confidence of each
+chardet and return the best guess."
+;;   (backward-word)
   (let ((lists unicad-singlebyte-group-list)
         (mState 'eDetecting)
         (bestConf 0.0)
-        (start (point))
+;;         (start (point))
         state prober mBestGuess cf)
     (setq unicad-singlebyte-best-guess '(nil 0.0)
           unicad-singlebyte-group-guess nil)
     (while (and lists (eq mState 'eDetecting))
-      (setq prober (pop lists))
-      (setq state (funcall prober
+      (setq state (funcall (pop lists)
                            start end))
       (cond
        ((eq state 'eFoundIt)
-        (setq mBestGuess (unicad-chardet-name model))
+        (setq mBestGuess (car (nth 0 unicad-singlebyte-group-guess)))
         (setq bestConf unicad--sure-yes)
         (setq mState 'eFoundIt))
        ((eq state 'eNotMe) nil)
        (t
-;;         (setq cf (unicad-chardet-confidence model)
         (setq cf (cdr (nth 0 unicad-singlebyte-group-guess)))
         (if (> cf bestConf)
             (progn
-              ;;               (setq mBestGuess (unicad-chardet-name model))
               (setq mBestGuess (car (nth 0 unicad-singlebyte-group-guess)))
-              (setq bestConf cf))))))
+              (setq bestConf cf)))))
+      )
     (setq unicad-singlebyte-group-guess (reverse unicad-singlebyte-group-guess))
     (if (or (<= bestConf unicad--sure-no) (null mBestGuess))
         (setq mState 'eNotMe)
@@ -655,6 +362,7 @@
   (let ((mReversed nil)
         (mState 'eDetecting)
         (meetMSB t)
+        (word-mark (point))
         (words 0)
         (order0 255)
         (total-char 0)
@@ -663,61 +371,67 @@
         (seq-counters [0 0 0 0])
         code cf order1)
     (fillarray seq-counters 0)
-    (while (and (< (point) end)
-                (eq mState 'eDetecting)
-                (< words 50))
-      (setq code (char-after))
-      (forward-char)
-      (when (and (>= code #x80) (not meetMSB))
-        (setq meetMSB t)
-        (forward-word)
-        (backward-word)
+    (save-excursion
+      (while (and (< (point) end)
+                  (eq mState 'eDetecting)
+                  (< words unicad-quick-singlebyte-words)
+                  )
         (setq code (char-after))
         (forward-char)
-        (setq words (1+ words)))
-      (if (and (< code #x80) (looking-at "\\W"))
-          (setq meetMSB nil))
-      (when meetMSB
-;;         (setq order1 (unicad-sb-get-order model code))
-        (setq order1 (aref char2order-map code))
-        (if (< order1 unicad-symbol-cat-order)
-            (setq total-char (1+ total-char)))
-        (when (< order1 unicad-sample-size)
-          (setq freq-char (1+ freq-char))
-          (when (< order0 unicad-sample-size)
-            (setq total-seqs (1+ total-seqs))
-            (if (not mReversed)
+        (when (and (>= code #x80) (not meetMSB))
+          (setq meetMSB t)
+          ;;         (forward-word)
+          ;;         (backward-word)
+          ;;         (unless (looking-at "\\<")
+          ;;           (backward-word))
+          (goto-char word-mark)
+          (setq code (char-after))
+          (forward-char)
+          ;;         (setq words (1+ words))
+          )
+        ;;       (if (and meetMSB (< code #x80) (looking-at "\\W"))
+        ;;           (setq meetMSB nil
+        ;;                 words (1+ words)))
+        (if (and 
+             (< code #x80) ;;(looking-at "\\W")
+             (not (or (and (> code ?a) (< code ?z))
+                      (and (> code ?A) (< code ?Z)))))
+            (setq meetMSB nil
+                  word-mark (point)
+                  words (1+ words)))
+        (when meetMSB
+          (setq order1 (aref char2order-map code))
+          (if (< order1 unicad-symbol-cat-order)
+              (setq total-char (1+ total-char)))
+          (when (< order1 unicad-sample-size)
+            (setq freq-char (1+ freq-char))
+            (when (< order0 unicad-sample-size)
+              (setq total-seqs (1+ total-seqs))
+              (if (not mReversed)
+                  (unicad-sb-seq-counters++
+                   seq-counters
+                   (aref lang-model (+ order1 (* order0 unicad-sample-size))))
                 (unicad-sb-seq-counters++
                  seq-counters
-                 (aref lang-model (+ order1 (* order0 unicad-sample-size))))
-;;                  (unicad-sb-precedence-matrix model (+ order1 (* order0 unicad-sample-size))))
-              (unicad-sb-seq-counters++
-               seq-counters
-               (aref lang-model (+ order0 (* order1 unicad-sample-size)))))
-;;                (unicad-sb-precedence-matrix model (+ order0 (* order1 unicad-sample-size)))))
-            ))
-        (setq order0 order1)))
+                 (aref lang-model (+ order0 (* order1 unicad-sample-size)))))
+              ))
+          (setq order0 order1))))
     (setq cf (unicad-singlebyte-get-confidence 
               positive-ratio total-char freq-char total-seqs seq-counters))
     (cond
      ((and (> total-seqs unicad-sb-enough-rel-threshold) 
            (> cf unicad-positive-shortcut-threshold))
       (setq mState 'eFoundIt)
-;;       (unicad-chardet-set-confidence model unicad--sure-yes)
       (push (cons charset-name unicad--sure-yes) unicad-singlebyte-group-guess))
-;;       (push (cons (unicad-sb-get-name model) unicad--sure-yes) unicad-singlebyte-group-guess))
      ((< cf unicad-negative-shortcut-threshold)
       (setq mState 'eNotMe)
-;;       (unicad-chardet-set-confidence model unicad--sure-no)
       (push (cons charset-name unicad--sure-no) unicad-singlebyte-group-guess))
-;;       (push (cons (unicad-sb-get-name model) unicad--sure-no) unicad-singlebyte-group-guess))
      (t 
-;;       (unicad-chardet-set-confidence model cf)
       (push (cons charset-name cf) unicad-singlebyte-group-guess)))
-;;       (push (cons (unicad-sb-get-name model) cf) unicad-singlebyte-group-guess)))
     mState))
 
 (defun unicad-singlebyte-get-confidence (positive-ratio total-char freq-char total-seqs seq-counters)
+  "calculate the confidence for a singlebyte chardet"
   ;;positive approach
   (let ((confidence 0.01)
         r)
@@ -729,11 +443,6 @@
       (setq confidence (min 0.99 r)))
     confidence))
 
-
-;; (defsubst unicad-latin7-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-latin7-list
-;;                           unicad-latin7-model unicad-latin7-dist-table))
-
 (defsubst unicad-latin7-prober (start end)
   (unicad-singlebyte-prober start end
                             unicad-latin7-name
@@ -743,11 +452,8 @@
 
 (defconst unicad-latin7-name 'iso-8859-7
   "The charset name for latin7-prober")
-(defconst unicad-latin7-positive-ratio 0.982851)
 
-;; (defsubst unicad-win1253-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-win1253-list
-;;                           unicad-win1253-model unicad-win1253-dist-table))
+(defconst unicad-latin7-positive-ratio 0.982851)
 
 (defsubst unicad-win1253-prober (start end)
   (unicad-singlebyte-prober start end
@@ -758,11 +464,8 @@
 
 (defconst unicad-win1253-name 'windows-1253
   "The charset name for win1253-prober")
-(defconst unicad-win1253-positive-ratio 0.982851)
 
-;; (defsubst unicad-koi8r-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-koi8r-list
-;;                           unicad-koi8r-model unicad-koi8r-dist-table))
+(defconst unicad-win1253-positive-ratio 0.982851)
 
 (defsubst unicad-koi8r-prober (start end)
   (unicad-singlebyte-prober start end
@@ -773,11 +476,8 @@
 
 (defconst unicad-koi8r-name 'koi8-r
   "The charset name for koi8r-prober")
-(defconst unicad-koi8r-positive-ratio 0.976601)
 
-;; (defsubst unicad-win1251-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-win1251-list
-;;                           unicad-win1251-model unicad-win1251-dist-table))
+(defconst unicad-koi8r-positive-ratio 0.976601)
 
 (defsubst unicad-win1251-prober (start end)
   (unicad-singlebyte-prober start end
@@ -788,11 +488,8 @@
 
 (defconst unicad-win1251-name 'windows-1251
   "The charset name for win1251-prober")
-(defconst unicad-win1251-positive-ratio 0.976601)
 
-;; (defsubst unicad-latin5-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-latin5-list
-;;                           unicad-latin5-model unicad-latin5-dist-table))
+(defconst unicad-win1251-positive-ratio 0.976601)
 
 (defsubst unicad-latin5-prober (start end)
   (unicad-singlebyte-prober start end
@@ -803,26 +500,20 @@
 
 (defconst unicad-latin5-name 'iso-8859-5
   "The charset name for latin5-prober")
+
 (defconst unicad-latin5-positive-ratio 0.976601)
 
-;; (defsubst unicad-ibm855-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-ibm855-list
-;;                           unicad-ibm855-model unicad-ibm855-dist-table))
-
-(defsubst unicad-imb855-prober (start end)
+(defsubst unicad-ibm855-prober (start end)
   (unicad-singlebyte-prober start end
-                            unicad-imb855-name
-                            unicad-imb855-positive-ratio
-                            unicad-imb855-char2order-map
+                            unicad-ibm855-name
+                            unicad-ibm855-positive-ratio
+                            unicad-ibm855-char2order-map
                             unicad-russian-lang-model))
 
-(defconst unicad-imb855-name 'ibm855
-  "The charset name for imb855-prober")
-(defconst unicad-imb855-positive-ratio 0.976601)
+(defconst unicad-ibm855-name 'ibm855
+  "The charset name for ibm855-prober")
 
-;; (defsubst unicad-latin5-bulgarian-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-latin5-bulgarian-list
-;;                           unicad-latin5-bulgarian-model unicad-latin5-bulgarian-dist-table))
+(defconst unicad-ibm855-positive-ratio 0.976601)
 
 (defsubst unicad-latin5-bulgarian-prober (start end)
   (unicad-singlebyte-prober start end
@@ -833,11 +524,8 @@
 
 (defconst unicad-latin5-bulgarian-name 'iso-8859-5
   "The charset name for latin5-bulgarian-prober")
-(defconst unicad-latin5-bulgarian-positive-ratio 0.976601)
 
-;; (defsubst unicad-win1251-bulgarian-prober (start end)
-;;   (unicad-singlebyte-prober start end unicad-win1251-bulgarian-list
-;;                           unicad-win1251-bulgarian-model unicad-win1251-bulgarian-dist-table))
+(defconst unicad-latin5-bulgarian-positive-ratio 0.976601)
 
 (defsubst unicad-win1251-bulgarian-prober (start end)
   (unicad-singlebyte-prober start end
@@ -848,34 +536,55 @@
 
 (defconst unicad-win1251-bulgarian-name 'windows-1251
   "The charset name for win1251-bulgarian-prober")
+
 (defconst unicad-win1251-bulgarian-positive-ratio 0.969392)
 
+(defsubst unicad-sjis-sb-prober (start end)
+  (unicad-singlebyte-prober start end
+                            unicad-sjis-sb-name
+                            unicad-sjis-sb-positive-ratio
+                            unicad-sjis-sb-char2order-map
+                            unicad-sjis-sb-lang-model))
+
+(defconst unicad-sjis-sb-name 'sjis
+  "The charset name for sjis-sb-prober")
+
+(defconst unicad-sjis-sb-positive-ratio 0.95)
+
 ;;}}}
+
 
 ;;{{{ Multibyte Prober
 (defvar unicad-best-guess nil
   "(MACHINE-BEST-GUESS BEST-CONFIDENCE)")
 
-(defvar unicad-chosen-gb-coding-system 'gb2312)
+;; (defvar unicad-chosen-gb-coding-system 'gb2312)
 
-(setq unicad-chosen-gb-coding-system (cond 
-                               ((coding-system-p 'gb18030)
-                                'gb18030)
-                               ((coding-system-p 'gbk)
-                               'gbk)
-                               (t 'gb2312)))
-(defvar unicad-group-list
+(defvar unicad-chosen-gb-coding-system 
+  (cond 
+   ((coding-system-p 'gb18030)
+    'gb18030)
+   ((coding-system-p 'gbk)
+    'gbk)
+   (t 'gb2312)))
+
+(defvar unicad-multibyte-group-list
   `([,unicad-chosen-gb-coding-system 0 unicad-gb2312-prober]
     [big5 0 unicad-big5-prober]
     [sjis 0 unicad-sjis-prober]
     [euc-jp 0 unicad-eucjp-prober]
     [euc-kr 0 unicad-euckr-prober]
     [euc-tw 0 unicad-euctw-prober]
-    [utf-8 0 unicad-utf8-prober])
+    [utf-8 0 unicad-utf8-prober]
+    [utf-16-le 0 unicad-ucs2le-prober]
+    [utf-16-be 0 unicad-ucs2be-prober])
   "([CODING-SYSTEM BEST-CONFIDENCE PROBER-FUNCTION] ...)")
 
 (defun unicad-multibyte-group-prober (start end)
-  (let ((lists unicad-group-list)
+  "extract the multibyte chardet prober functions from
+`unicad-multibyte-group-list', compare the confidence of each
+chardet and return the best guess."
+  (let ((lists unicad-multibyte-group-list)
         (mState 'eDetecting)
         (bestConf 0.0)
         state chardet mBestGuess cf)
@@ -903,11 +612,13 @@
 
 
 (defun unicad-cjk-prober (start end chardet model dist-table dist-ratio analyser)
-  "A generic prober for two byte coding system"
+  "A generic prober for two byte coding system. e.g. chinese,
+japanese, korean"
   (let ((mState 'eDetecting)
         (mConfidence 0.0)
         (code0 0) (code1 0)
         (size (- end start))
+        (mb-num 0)                      ;number of multi-byte words
         codingState charlen)
     (unicad-sm-reset)
     (unicad-dist-table-reset dist-table)
@@ -915,7 +626,8 @@
       (goto-char start)
       (setq code1 (char-after))
       (while (and (< (point) end)
-                  (eq mState 'eDetecting))
+                  (eq mState 'eDetecting)
+                  (< mb-num unicad-quick-multibyte-words))
         (setq code1 (char-after)
               codingState (unicad-next-state code1 model))
         (forward-char 1)
@@ -923,6 +635,8 @@
          ;; we are interested only in 2-byte
          ((= codingState unicad--eStart)
           (setq charlen (unicad-sm-get 'mCharLen))
+          (if (> charlen 1)
+                (setq mb-num  (1+ mb-num)))
           ;; we need the analyser, only when charlen > 1
           (and (> charlen 1) (funcall analyser code0 code1)))
          ((= codingState unicad--eError)
@@ -948,9 +662,11 @@
 
 
 ;;{{{  utf8 prober
-(defvar unicad-utf8-list (unicad-chardet unicad-group-list 'unicad-utf8-prober))
+(defvar unicad-utf8-list (unicad-chardet unicad-multibyte-group-list 'unicad-utf8-prober))
 
 (defun unicad-utf8-prober (start end)
+  "Detect for utf-8 coding-system by state
+machine (`unicad-next-state') and get the confidence"
   (let ((mState 'eDetecting)
         (mNumOfMBChar 0)
         codingState charlen (mConfidence 0.0))
@@ -983,6 +699,7 @@
       mState)))
 
 (defun unicad-utf8-get-confidence (mNumOfMBChar)
+  "calculate the confidence for utf-8"
   (let ((unlike unicad--sure-yes)
         (one-char-prob 0.5))
     (if (< mNumOfMBChar 6)
@@ -990,12 +707,249 @@
       (setq unlike unicad--sure-no))
     (- 1 unlike)))
 ;;}}}
+
 
+(defvar unicad-ucs2be-list (unicad-chardet unicad-multibyte-group-list 'unicad-ucs2be-prober))
+
+(defun unicad-ucs2be-prober (start end)
+  "A simple prober function for utf-16-be. It only counts the
+newline, space, numbers and english letters."
+  (let ((mState 'eNotMe)
+        (count 0)
+        code0 code1)
+    (setq start (point-min)
+          end (min (point-max) 1000))
+    (if (% end 2)
+        (setq end (1- end)))
+    (save-excursion
+      (goto-char start)
+      (while (and (< (point) end)
+                  (eq mState 'eNotMe))
+        (setq code0 (char-after))
+        (forward-char 1)
+        (setq code1 (char-after))
+        (forward-char 1)
+        (when (= code0 0)
+          (if (or (= code1 #x0d)
+                  (= code1 #x0a)
+                  (= code1 #x20)
+                  (and (> code1 ?0) (< code1 ?9))
+                  (and (> code1 ?a) (< code1 ?z))
+                  (and (> code1 ?A) (< code1 ?Z)))
+              (setq count (1+ count)))
+          (if (> count 10)
+              (setq mState 'eFoundIt)))))
+    mState))
+
+
+(defvar unicad-ucs2le-list (unicad-chardet unicad-multibyte-group-list 'unicad-ucs2le-prober))
+
+(defun unicad-ucs2le-prober (start end)
+  "A simple prober function for utf-16-le. It only counts the
+newline, space, numbers and english letters."
+  (let ((mState 'eNotMe)
+        (count 0)
+        code0 code1)
+    (setq start (point-min)
+          end (min (point-max) 1000))
+    (if (% end 2)
+        (setq end (1- end)))
+    (save-excursion
+      (goto-char start)
+      (while (and (< (point) end)
+                  (eq mState 'eNotMe))
+        (setq code0 (char-after))
+        (forward-char 1)
+        (setq code1 (char-after))
+        (forward-char 1)
+        (when (= code1 0)
+          (if (or (= code0 #x0d)
+                  (= code0 #x0a)
+                  (= code0 #x20)
+                  (and (> code0 ?0) (< code0 ?9))
+                  (and (> code0 ?a) (< code0 ?z))
+                  (and (> code0 ?A) (< code0 ?Z)))
+              (setq count (1+ count)))
+          (if (> count 10)
+              (setq mState 'eFoundIt)))))
+    mState))
+
+;; (defun unicad-ucs2le-prober (start end)
+;;   (let ((mState 'eDetecting)
+;;         (mNumOfMBChar 0)
+;;         codingState charlen (mConfidence 0.0))
+;;     (setq start (point-min)
+;;           end (point-max))
+;;     (unicad-sm-reset)
+;;     (save-excursion
+;;       (goto-char start)
+;;       (while (and (< (point) end)
+;;                   (eq mState 'eDetecting))
+;;         (setq codingState (unicad-next-state (char-after)
+;;                                            unicad-ucs2le-sm-model))
+;;         (setq charlen (unicad-sm-get 'mCharLen))
+;;         (forward-char 1)
+;;         (cond
+;;          ((= codingState unicad--eStart)
+;;           (if (>= charlen 2)
+;;               (setq mNumOfMBChar (1+ mNumOfMBChar))))
+;;          ((= codingState unicad--eError)
+;;           (setq mState 'eNotMe)
+;;           (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-no))
+;;          ((= codingState unicad--eItsMe)
+;;           (setq mState 'eFoundIt)
+;;           (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-yes))
+;;          (t nil)))
+;;       (if (eq mState 'eDetecting)
+;;           (if (> (setq mConfidence (unicad-ucs2le-get-confidence mNumOfMBChar)) unicad-threshold)
+;;               (progn
+;;                 (setq mState 'eFoundIt)
+;;                 (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-yes))
+;;             (unicad-chardet-set-confidence unicad-ucs2le-list mConfidence)))
+;;       mState)))
+
+;; (defun unicad-ucs2le-get-confidence (mNumOfMBChar)
+;;   (let ((unlike unicad--sure-yes)
+;;         (one-char-prob 0.5))
+;;     (if (< mNumOfMBChar 6)
+;;         (setq unlike (* (expt one-char-prob mNumOfMBChar) unlike))
+;;       (setq unlike unicad--sure-no))
+;;     (- 1 unlike)))
+
+;;;{{{ ucs2 state machine
+;; the state machine for ucs2 seems doesn't work.
+;; so I use the simple prober above to detect ucs2
+
+(defconst unicad-ucs2be-class-table
+  [
+   0 0 0 0 0 0 0 0 ;; 00 - 07 
+   0 0 1 0 0 2 0 0 ;; 08 - 0f 
+   0 0 0 0 0 0 0 0 ;; 10 - 17 
+   0 0 0 3 0 0 0 0 ;; 18 - 1f 
+   0 0 0 0 0 0 0 0 ;; 20 - 27 
+   0 3 3 3 3 3 0 0 ;; 28 - 2f 
+   0 0 0 0 0 0 0 0 ;; 30 - 37 
+   0 0 0 0 0 0 0 0 ;; 38 - 3f 
+   0 0 0 0 0 0 0 0 ;; 40 - 47 
+   0 0 0 0 0 0 0 0 ;; 48 - 4f 
+   0 0 0 0 0 0 0 0 ;; 50 - 57 
+   0 0 0 0 0 0 0 0 ;; 58 - 5f 
+   0 0 0 0 0 0 0 0 ;; 60 - 67 
+   0 0 0 0 0 0 0 0 ;; 68 - 6f 
+   0 0 0 0 0 0 0 0 ;; 70 - 77 
+   0 0 0 0 0 0 0 0 ;; 78 - 7f 
+   0 0 0 0 0 0 0 0 ;; 80 - 87 
+   0 0 0 0 0 0 0 0 ;; 88 - 8f 
+   0 0 0 0 0 0 0 0 ;; 90 - 97 
+   0 0 0 0 0 0 0 0 ;; 98 - 9f 
+   0 0 0 0 0 0 0 0 ;; a0 - a7 
+   0 0 0 0 0 0 0 0 ;; a8 - af 
+   0 0 0 0 0 0 0 0 ;; b0 - b7 
+   0 0 0 0 0 0 0 0 ;; b8 - bf 
+   0 0 0 0 0 0 0 0 ;; c0 - c7 
+   0 0 0 0 0 0 0 0 ;; c8 - cf 
+   0 0 0 0 0 0 0 0 ;; d0 - d7 
+   0 0 0 0 0 0 0 0 ;; d8 - df 
+   0 0 0 0 0 0 0 0 ;; e0 - e7 
+   0 0 0 0 0 0 0 0 ;; e8 - ef 
+   0 0 0 0 0 0 0 0 ;; f0 - f7 
+   0 0 0 0 0 0 4 5 ;; f8 - ff 
+   ])
+
+
+(defconst unicad-ucs2be-state-table
+  (let ((eStart 0)
+        (eError 1)
+        (eItsMe 2))
+    (vector
+     5      7      7 eError      4      3 eError eError ;;00-07 
+     eError eError eError eError eItsMe eItsMe eItsMe eItsMe ;;08-0f 
+     eItsMe eItsMe      6      6      6      6 eError eError ;;10-17 
+     6      6      6      6      6 eItsMe      6      6      ;;18-1f 
+     6      6      6      6      5      7      7 eError      ;;20-27 
+     5      8      6      6 eError      6      6      6      ;;28-2f 
+     6      6      6      6 eError eError eStart eStart      ;;30-37 
+     )))
+
+(defconst unicad-ucs2be-charlen-table
+  [2  2  2  0  2  2])
+
+(defvar unicad-ucs2be-sm-model
+  (list
+   (cons 'classTable unicad-ucs2be-class-table)
+   (cons 'classFactor 6)
+   (cons 'stateTable unicad-ucs2be-state-table)
+   (cons 'charLenTable unicad-ucs2be-charlen-table)
+   (cons 'name "UTF-16-BE")))
+
+(defconst unicad-ucs2le-class-table
+  [
+   0 0 0 0 0 0 0 0 ;; 00 - 07 
+   0 0 1 0 0 2 0 0 ;; 08 - 0f 
+   0 0 0 0 0 0 0 0 ;; 10 - 17 
+   0 0 0 3 0 0 0 0 ;; 18 - 1f 
+   0 0 0 0 0 0 0 0 ;; 20 - 27 
+   0 3 3 3 3 3 0 0 ;; 28 - 2f 
+   0 0 0 0 0 0 0 0 ;; 30 - 37 
+   0 0 0 0 0 0 0 0 ;; 38 - 3f 
+   0 0 0 0 0 0 0 0 ;; 40 - 47 
+   0 0 0 0 0 0 0 0 ;; 48 - 4f 
+   0 0 0 0 0 0 0 0 ;; 50 - 57 
+   0 0 0 0 0 0 0 0 ;; 58 - 5f 
+   0 0 0 0 0 0 0 0 ;; 60 - 67 
+   0 0 0 0 0 0 0 0 ;; 68 - 6f 
+   0 0 0 0 0 0 0 0 ;; 70 - 77 
+   0 0 0 0 0 0 0 0 ;; 78 - 7f 
+   0 0 0 0 0 0 0 0 ;; 80 - 87 
+   0 0 0 0 0 0 0 0 ;; 88 - 8f 
+   0 0 0 0 0 0 0 0 ;; 90 - 97 
+   0 0 0 0 0 0 0 0 ;; 98 - 9f 
+   0 0 0 0 0 0 0 0 ;; a0 - a7 
+   0 0 0 0 0 0 0 0 ;; a8 - af 
+   0 0 0 0 0 0 0 0 ;; b0 - b7 
+   0 0 0 0 0 0 0 0 ;; b8 - bf 
+   0 0 0 0 0 0 0 0 ;; c0 - c7 
+   0 0 0 0 0 0 0 0 ;; c8 - cf 
+   0 0 0 0 0 0 0 0 ;; d0 - d7 
+   0 0 0 0 0 0 0 0 ;; d8 - df 
+   0 0 0 0 0 0 0 0 ;; e0 - e7 
+   0 0 0 0 0 0 0 0 ;; e8 - ef 
+   0 0 0 0 0 0 0 0 ;; f0 - f7 
+   0 0 0 0 0 0 4 5 ;; f8 - ff 
+   ])
+
+
+(defconst unicad-ucs2le-state-table
+  (let ((eStart 0)
+        (eError 1)
+        (eItsMe 2))
+    (vector
+     6      6      7      6      4      3 eError eError ;;00-07 
+     eError eError eError eError eItsMe eItsMe eItsMe eItsMe ;;08-0f 
+     eItsMe eItsMe      5      5      5 eError eItsMe eError ;;10-17 
+     5      5      5 eError      5 eError      6      6      ;;18-1f 
+     7      6      8      8      5      5      5 eError      ;;20-27 
+     5      5      5 eError eError eError      5      5      ;;28-2f 
+     5      5      5 eError      5 eError eStart eStart      ;;30-37 
+     )))
+
+(defconst unicad-ucs2le-charlen-table
+  [2  2  2  2  2  2])
+
+(defvar unicad-ucs2le-sm-model
+  (list
+   (cons 'classTable unicad-ucs2le-class-table)
+   (cons 'classFactor 6)
+   (cons 'stateTable unicad-ucs2le-state-table)
+   (cons 'charLenTable unicad-ucs2le-charlen-table)
+   (cons 'name "UTF-16-LE")))
+
+;;}}}
 
 ;; Probers for east asian languages
 
 ;;{{{  gb2312 prober
-(defvar unicad-gb2312-list (unicad-chardet unicad-group-list 'unicad-gb2312-prober))
+(defvar unicad-gb2312-list (unicad-chardet unicad-multibyte-group-list 'unicad-gb2312-prober))
 (defvar unicad-gb2312-dist-table '(0 . 0))
 
 (defsubst unicad-gb2312-prober (start end)
@@ -1003,11 +957,11 @@
                    unicad-gb18030-sm-model unicad-gb2312-dist-table
                    unicad-gb2312-dist-ratio 'unicad-gb2312-analyser))
 
-;;for GB2312 encoding, we are interested
-;;  first  byte range: 0xb0 -- 0xfe
-;;  second byte range: 0xa1 -- 0xfe
-;;no validation needed here. State machine has done that
 (defun unicad-gb2312-analyser (ch0 ch1)
+  "for GB2312 encoding, we are interested 
+first  byte range: 0xb0 -- 0xfe 
+second byte range: 0xa1 -- 0xfe 
+no validation needed here.  State machine has done that"
   (when (and (>= ch0 #xb0) (>= ch1 #xa1))
     (let (order)
       (setq order (- (+ (* 94 (- ch0 #xb0)) ch1) #xa1))
@@ -1019,18 +973,18 @@
 ;;}}}
 
 ;;{{{  big5 prober
-(defvar unicad-big5-list (unicad-chardet unicad-group-list 'unicad-big5-prober))
+(defvar unicad-big5-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5-prober))
 (defvar unicad-big5-dist-table '(0 . 0))
 (defsubst unicad-big5-prober (start end)
   (unicad-cjk-prober start end unicad-big5-list
                    unicad-big5-sm-model unicad-big5-dist-table
                    unicad-big5-dist-ratio 'unicad-big5-analyser))
 
-;;for big5 encoding, we are interested 
-;;  first  byte range: 0xa4 -- 0xfe
-;;  second byte range: 0x40 -- 0x7e , 0xa1 -- 0xfe
-;;no validation needed here. State machine has done that
 (defun unicad-big5-analyser (ch0 ch1)
+  "for big5 encoding, we are interested 
+  first  byte range: 0xa4 -- 0xfe
+  second byte range: 0x40 -- 0x7e , 0xa1 -- 0xfe
+no validation needed here. State machine has done that"
   (when (>= ch0 #xa4)
     (let ((order -1))
       (if (>= ch1 #xa1)
@@ -1044,18 +998,19 @@
 ;;}}}
 
 ;;{{{  sjis prober
-(defvar unicad-sjis-list (unicad-chardet unicad-group-list 'unicad-sjis-prober))
+(defvar unicad-sjis-list (unicad-chardet unicad-multibyte-group-list 'unicad-sjis-prober))
 (defvar unicad-sjis-dist-table '(0 . 0))
 (defsubst unicad-sjis-prober (start end)
   (unicad-cjk-prober start end unicad-sjis-list
                    unicad-sjis-sm-model unicad-sjis-dist-table
                    unicad-jis-dist-ratio 'unicad-sjis-analyser))
 
-;;for sjis encoding, we are interested 
-;;  first  byte range: 0x81 -- 0x9f , 0xe0 -- 0xfe
-;;  second byte range: 0x40 -- 0x7e,  0x80 -- 0xfc
-;;no validation needed here. State machine has done that
 (defun unicad-sjis-analyser (ch0 ch1)
+  "for sjis encoding, we are interested 
+  first  byte range: 0x81 -- 0x9f , 0xe0 -- 0xfe
+  second byte range: 0x40 -- 0x7e,  0x80 -- 0xfc
+no validation needed here. State machine has done that
+ !NOTE! 0xA1 -- 0xDF are valid halfwidth katakana!!!"
   (let ((order -1))
     (cond
      ((and (>= ch0 #x81) (<= ch0 #x9f))
@@ -1074,18 +1029,18 @@
 ;;}}}
 
 ;;{{{  eucjp prober
-(defvar unicad-eucjp-list (unicad-chardet unicad-group-list 'unicad-eucjp-prober))
+(defvar unicad-eucjp-list (unicad-chardet unicad-multibyte-group-list 'unicad-eucjp-prober))
 (defvar unicad-eucjp-dist-table '(0 . 0))
 (defsubst unicad-eucjp-prober (start end)
   (unicad-cjk-prober start end unicad-eucjp-list
                    unicad-eucjp-sm-model unicad-eucjp-dist-table
                    unicad-jis-dist-ratio 'unicad-eucjp-analyser))
 
-;;for EUCJP encoding, we are interested 
-;;  first  byte range: 0xa0 -- 0xfe
-;;  second byte range: 0xa1 -- 0xfe
-;;no validation needed here. State machine has done that
 (defun unicad-eucjp-analyser (ch0 ch1)
+  "for EUCJP encoding, we are interested 
+  first  byte range: 0xa0 -- 0xfe
+  second byte range: 0xa1 -- 0xfe
+no validation needed here. State machine has done that"
   (when (>= ch0 #xa0)
     (let (order)
       (setq order (- (+ (* 94 (- ch0 #xa1)) ch1) #xa1))
@@ -1097,18 +1052,18 @@
 ;;}}}
 
 ;;{{{  euckr prober
-(defvar unicad-euckr-list (unicad-chardet unicad-group-list 'unicad-euckr-prober))
+(defvar unicad-euckr-list (unicad-chardet unicad-multibyte-group-list 'unicad-euckr-prober))
 (defvar unicad-euckr-dist-table '(0 . 0))
 (defsubst unicad-euckr-prober (start end)
   (unicad-cjk-prober start end unicad-euckr-list
                    unicad-euckr-sm-model unicad-euckr-dist-table
                    unicad-jis-dist-ratio 'unicad-euckr-analyser))
 
-;;for euc-KR encoding, we are interested 
-;;  first  byte range: 0xb0 -- 0xfe
-;;  second byte range: 0xa1 -- 0xfe
-;;no validation needed here. State machine has done that
 (defun unicad-euckr-analyser (ch0 ch1)
+  "for euc-KR encoding, we are interested 
+  first  byte range: 0xb0 -- 0xfe
+  second byte range: 0xa1 -- 0xfe
+no validation needed here. State machine has done that"
   (when (>= ch0 #xb0)
     (let (order)
       (setq order (- (+ (* 94 (- ch0 #xb0)) ch1) #xa1))
@@ -1120,18 +1075,18 @@
 ;;}}}
 
 ;;{{{  euctw prober
-(defvar unicad-euctw-list (unicad-chardet unicad-group-list 'unicad-euctw-prober))
+(defvar unicad-euctw-list (unicad-chardet unicad-multibyte-group-list 'unicad-euctw-prober))
 (defvar unicad-euctw-dist-table '(0 . 0))
 (defsubst unicad-euctw-prober (start end)
   (unicad-cjk-prober start end unicad-euctw-list
                    unicad-euctw-sm-model unicad-euctw-dist-table
                    unicad-euctw-dist-ratio 'unicad-euctw-analyser))
 
-;;for euc-TW encoding, we are interested 
-;;  first  byte range: 0xc4 -- 0xfe
-;;  second byte range: 0xa1 -- 0xfe
-;;no validation needed here. State machine has done that
 (defun unicad-euctw-analyser (ch0 ch1)
+  "for euc-TW encoding, we are interested 
+  first  byte range: 0xc4 -- 0xfe
+  second byte range: 0xa1 -- 0xfe
+no validation needed here. State machine has done that"
   (when (>= ch0 #xc4)
     (let (order)
       (setq order (- (+ (* 94 (- ch0 #xc4)) ch1) #xa1))
@@ -1157,6 +1112,7 @@
   '(latin-2 0.0))
 
 (defun unicad-latin-group-prober (start end)
+  "for latin-1 and latin-2"
   (let (latin1-conf latin2-conf)
     (save-excursion
       (setq latin1-conf
@@ -1243,6 +1199,7 @@
   (cdr (assoc name unicad-sm-coding-state)))
 
 (defun unicad-next-state (ch model)
+  "Verificate multibyte codings by class-table and state-table"
   (let ((current-state (unicad-sm-get 'mState))
         (current-bytepos (unicad-sm-get 'mBytePos))
         (byteCls (aref (cdr (assoc 'classTable model))  ch))
@@ -1269,7 +1226,7 @@
     1 1 1 1 1 1 1 1         ;; 00 - 07 0 
     1 1 1 1 1 1 0 0         ;; 08 - 0f 1
     1 1 1 1 1 1 1 1         ;; 10 - 17 2
-    1 1 1 0 1 1 1 1         ;; 18 - 1f 3
+    1 1 1 1 1 1 1 1        ;; 1 1 1 0 1 1 1 1        ;; 18 - 1f
     1 1 1 1 1 1 1 1         ;; 20 - 27 4
     1 1 1 1 1 1 1 1         ;; 28 - 2f 5
     1 1 1 1 1 1 1 1         ;; 30 - 37 6
@@ -1354,7 +1311,7 @@
    1 1 1 1 1 1 1 1        ;; 00 - 07
    1 1 1 1 1 1 0 0        ;; 08 - 0f
    1 1 1 1 1 1 1 1        ;; 10 - 17
-   1 1 1 0 1 1 1 1        ;; 18 - 1f
+   1 1 1 1 1 1 1 1        ;; 18 - 2f allow esc as legal value
    1 1 1 1 1 1 1 1        ;; 20 - 27
    1 1 1 1 1 1 1 1        ;; 28 - 2f
    3 3 3 3 3 3 3 3        ;; 30 - 37
@@ -1421,7 +1378,7 @@
         1 1 1 1 1 1 1 1 ;; 00 - 07    ;;allow #x00 as legal value
         1 1 1 1 1 1 0 0 ;; 08 - 0f
         1 1 1 1 1 1 1 1 ;; 10 - 17
-        1 1 1 0 1 1 1 1 ;; 18 - 1f
+        1 1 1 1 1 1 1 1 ;; 18 - 1f    ;;allow esc as legal value
         1 1 1 1 1 1 1 1 ;; 20 - 27
         1 1 1 1 1 1 1 1 ;; 28 - 2f
         1 1 1 1 1 1 1 1 ;; 30 - 37
@@ -1481,7 +1438,7 @@
     1 1 1 1 1 1 1 1       ;; 00 - 07
     1 1 1 1 1 1 0 0       ;; 08 - 0f
     1 1 1 1 1 1 1 1       ;; 10 - 17
-    1 1 1 0 1 1 1 1       ;; 18 - 1f
+    1 1 1 1 1 1 1 1       ;; 18 - 1f  allow esc as legal value
     1 1 1 1 1 1 1 1       ;; 20 - 27
     1 1 1 1 1 1 1 1       ;; 28 - 2f
     1 1 1 1 1 1 1 1       ;; 30 - 37
@@ -1605,7 +1562,7 @@
     1 1 1 1 1 1 1 1       ;; 00 - 07
     1 1 1 1 1 1 0 0       ;; 08 - 0f
     1 1 1 1 1 1 1 1       ;; 10 - 17
-    1 1 1 0 1 1 1 1       ;; 18 - 1f
+    1 1 1 1 1 1 1 1       ;; 18 - 1f ;; allow esc as legal char
     1 1 1 1 1 1 1 1       ;; 20 - 27
     1 1 1 1 1 1 1 1       ;; 28 - 2f
     1 1 1 1 1 1 1 1       ;; 30 - 37
@@ -1782,6 +1739,86 @@
    0   3   2   2   2   2   1   1   1 ;; OTS
    ])
 ;;}}}
+
+
+;;{{{
+
+;; Esc CharSet Prober
+
+(defvar unicad-esc-group-list
+  (list
+   'unicad-hz-prober
+   'unicad-iso2022cn-prober
+   'unicad-iso2022jp-prober
+   'unicad-iso2022kr-prober))
+
+(defvar unicad-esc-group-guess nil)
+
+(defun unicad-esc-group-prober (start end)
+  (let ((lists unicad-esc-group-list)
+        (mState 'eDetecting)
+        (mBestGuess nil)
+        (bestConf 0.0)
+        state)
+    (setq unicad-esc-group-guess nil)
+    (while (and lists (eq mState 'eDetecting))
+      (setq state (funcall (pop lists)
+                           start end))
+      (cond
+       ((eq state 'eItsMe)
+        (setq mState 'eFoundIt)
+        (setq mBestGuess (car (nth 0 unicad-esc-group-guess)))
+        (setq bestConf   (cdr (nth 0 unicad-esc-group-guess)))
+        )
+       ((eq state 'eNotMe) nil)
+       ))
+    ))
+
+(defvar unicad-hz-name 'hz-gb-2312)
+(defvar unicad-iso2022cn-name 'iso-2022-cn)
+(defvar unicad-iso2022jp-name 'iso-2022-jp)
+(defvar unicad-iso2022kr-name 'iso-2022-kr)
+
+(defsubst unicad-hz-prober (start end)
+  (unicad-esc-charset-prober
+   start end unicad-hz-name unicad-hz-sm-model))
+
+(defsubst unicad-iso2022cn-prober (start end)
+  (unicad-esc-charset-prober
+   start end unicad-iso2022cn-name unicad-iso2022cn-sm-model))
+
+(defsubst unicad-iso2022jp-prober (start end)
+  (unicad-esc-charset-prober
+   start end unicad-iso2022jp-name unicad-iso2022jp-sm-model))
+
+(defsubst unicad-iso2022kr-prober (start end)
+  (unicad-esc-charset-prober
+   start end unicad-iso2022kr-name unicad-iso2022kr-sm-model))
+
+(defun unicad-esc-charset-prober (start end charset-name model)
+  (let ((mState 'eDetecting)
+        (code0 0)
+        (code1 0)
+        codingState)
+    (unicad-sm-reset)
+    (save-excursion
+      (goto-char start)
+      (while (and (< (point) end)
+                  (eq mState 'eDetecting))
+        (setq code1 (char-after))
+        (forward-char 1)
+        (setq codingState (unicad-next-state code1 model))
+        (cond
+         ((= codingState unicad--eError)
+          (setq mState 'eNotMe)
+          (push (cons charset-name unicad--sure-no) unicad-esc-group-guess))
+         ((= codingState unicad--eItsMe)
+          (setq mState 'eItsMe)
+          (push (cons charset-name unicad--sure-yes) unicad-esc-group-guess))))
+      )))
+
+;;}}}
+
 
 
 ;;;{{{ Latin2
@@ -4234,3 +4271,425 @@
 
 ;;;}}}
 
+
+;;;{{{
+
+(defvar unicad-sjis-sb-char2order-map
+  `[
+    255 255 255 255 255 255 255 255 255 255 254 255 255 254 255 255 ;;00
+    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 ;;10
+    +253 253 253 253 253 253 253 253 253 253 253 253 253 253 253 253 ;;20
+    252 252 252 252 252 252 252 252 252 252 253 253 253 253 253 253 ;;30
+    253 142 143 144 145 146 147 148 149 150 151 152  74 153  75 154 ;;40
+    155 156 157 158 159 160 161 162 163 164 165 253 253 253 253 253 ;;50
+    253  71 172  66 173  65 174  76 175  64 176 177  77  72 178  69 ;;60
+    67 179  78  73 180 181  79 182 183 184 185 253 253 253 253 253 ;;70
+    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 ;;80
+    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 ;;90
+    255 252 254 254 254  16  59  37  17  58  31  53  49  33  40  24;;a0
+      2  13   8  22  34  43  27  19   7  38  23  35  14   6  44  29;;b0
+     10  48  50  12   3  46  39  57  47  54  25  28   5  32  41  21;;c0
+     45  30  26  42  55  52  56  20  15  11  36  18  51   4   1   9;;d0
+    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255;;e0
+    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255;;f0
+    ])
+
+(defvar unicad-sjis-sb-lang-model
+  `[
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 2 3 3 3 3 3 0 3 3 3 3 3 3 3 3 2 3 3 0 3 0 3 2 2 2 2 2 3 2
+    2 3 0 3 3 3 3 2 3 2 2 3 2 2 3 3 0 3 2 2 0 0 0 2 0 2 2 0 0 0 0 0
+    0 3 0 3 0 0 3 0 0 0 3 3 0 0 2 0 0 0 0 0 0 0 2 0 0 0 0 2 0 0 0 2
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 2 2 0 0 0 0 2 0 0 0 0 0 0 0
+    0 3 0 2 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 3 0 0 3 3 0 0 3 3 0 0 3 0 0 0 0 0 3 0 0 0 0 0 0 0 0 3 0 0
+    0 0 0 3 0 0 0 0 0 0 0 0 0 0 2 2 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 3 0 0 0 0 0 3 0 0 2 0 0 3 2 3 2 0 3 0 0 0 0 0 0 0 0 0 3 0
+    0 0 0 0 2 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0
+    0 3 0 3 0 0 2 0 0 0 3 3 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 3 0 0 3 0 0 0 2 0 3 0 3 3 2 0 3 0 3 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 2 0 0 0 0 0 0 0 2 0 0 0 0 0 2 2 0 2 2 0 0 0 0 0 0 0 0 0
+    0 3 3 3 3 0 3 3 0 0 3 2 3 0 2 3 3 0 2 0 0 0 0 2 0 0 3 0 0 2 0 2
+    0 0 0 0 0 0 0 0 0 0 0 2 3 0 2 2 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 3 0 2 2 3 0 2 0 3 0 2 3 0 0 3 0 3 0 0 0 3 0 0 0 0 3 0 0
+    0 3 0 2 3 0 0 0 0 0 0 0 0 0 0 0 2 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 2 0 0 2 0 0 0 0 0 2 2 0 0 2 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 3 0 2 3 0 0 2 3 2 0 0 2 0 0 0 0 0 0 0 2 0 2 0 0 0 0 0 0 0
+    0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 2 0 2 0 2 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 3 3 3 3 2 3 3 2 0 3 0 2 0 3 0 2 0 2 0 2 0 3 0 3 2 2 0 0 0
+    0 0 0 0 2 0 0 3 0 0 2 2 0 0 2 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 2 0
+    0 2 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 3 2 0 0 3 0 0 0 3 2 0 0 3 3 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0
+    0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0
+    0 2 0 2 0 0 3 0 0 0 0 2 2 0 3 2 0 0 0 0 2 0 2 0 0 0 0 0 0 2 0 2
+    0 0 0 2 3 0 0 2 0 0 2 2 2 0 0 0 0 0 0 2 2 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 0 0 3 0 0 0 3 0 0 3 0 0 0 0 0 2 0 0 0 0 3 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 0 0 3 0 0 0 2 0 0 0 3 0 0 0 0 0 0 0 2 0 3 0 0 0 0 3 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 3 0 2 0 3 2 0 0 0 0 0 0 3 2 0 0 0 0 0 0 0 0 2 0 3 0 0 2 0 0
+    0 3 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 2 2 0 0 2 0 0 0 0 2 0 0 3 3 0 0 0 0 0 0 3 0 3 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 3 0 3 0 2 0 0 0 2 0 2 0 2 0 0 0 0 0 0 0 2 0 3 0 0 0 0 0 0 0
+    0 0 0 2 2 0 0 3 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 3 0 0 0 0 0 0 0 2 0 0 2 0 0 0 0 0 3 0 0 0 0 3 0 0 0 0 0
+    0 0 0 0 2 0 0 0 0 0 2 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 3 0 2 2 2 0 2 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 2 0 0 0 3 3 0 0 0 0 0 0 0 0 2 0 0 0 2 0 2 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 2 3 0 0 0 0 0 2 3 0 0 2 3 0 0 0 0 2 0 0 0 2 0 0 0 0 2 0 0
+    0 0 0 0 0 0 0 2 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 2 2 0 3 0 0 0 2 3 3 0 2 0 0 0 0 0 0 0 0 0 2 0 2 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 2 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 0 0 0 2 0 0 3 0 0 2 0 0 0 0 0 2 0 2 0 0 0 2 0 0 0 0 0 0 0
+    0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 2 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 0 0 2 0 0 0 3 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 2 2 2 2 2 0 2 2 2 3 2 0 0 3 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0
+    0 0 0 0 2 0 0 0 0 2 0 0 2 3 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0
+    0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 2 2 0 2 0 2 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 2 0 0 0 0 0 0 2 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 0 0 0 0 0 0 3 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 2 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 3 0 0 0 0 0 2 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 3 0 3 0 2 0 0 0 2 2 2 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 3 0 0 0 0 0 0 0 0 2 2 0 0 2 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 3 2 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 2 2 3 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 2 0 0 0 0 0 0 0
+    0 3 0 2 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 2 0 0 0 2 0 0 0 2 0 3 0 2 2 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 2 2 0 0 0 3 0 0 0 2 0 3 0 2 0 0 0 0 0 0 0 2 0 3 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 2 0 0 0 0 0 0 0 0 0 3 0 2 0 0 0 2 0 0 0 2 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    ])
+;;;}}}
+
+
+;;{{{ HZ state machine
+
+;; Esc Charset State Machine
+
+;; static PRUint32 HZ-cls
+(defconst unicad-hz-class-table
+  [
+   1 0 0 0 0 0 0 0 ;; 00 - 07 
+   0 0 0 0 0 0 0 0 ;; 08 - 0f 
+   0 0 0 0 0 0 0 0 ;; 10 - 17 
+   0 0 0 1 0 0 0 0 ;; 18 - 1f 
+   0 0 0 0 0 0 0 0 ;; 20 - 27 
+   0 0 0 0 0 0 0 0 ;; 28 - 2f 
+   0 0 0 0 0 0 0 0 ;; 30 - 37 
+   0 0 0 0 0 0 0 0 ;; 38 - 3f 
+   0 0 0 0 0 0 0 0 ;; 40 - 47 
+   0 0 0 0 0 0 0 0 ;; 48 - 4f 
+   0 0 0 0 0 0 0 0 ;; 50 - 57 
+   0 0 0 0 0 0 0 0 ;; 58 - 5f 
+   0 0 0 0 0 0 0 0 ;; 60 - 67 
+   0 0 0 0 0 0 0 0 ;; 68 - 6f 
+   0 0 0 0 0 0 0 0 ;; 70 - 77 
+   0 0 0 4 0 5 2 0 ;; 78 - 7f 
+   1 1 1 1 1 1 1 1 ;; 80 - 87 
+   1 1 1 1 1 1 1 1 ;; 88 - 8f 
+   1 1 1 1 1 1 1 1 ;; 90 - 97 
+   1 1 1 1 1 1 1 1 ;; 98 - 9f 
+   1 1 1 1 1 1 1 1 ;; a0 - a7 
+   1 1 1 1 1 1 1 1 ;; a8 - af 
+   1 1 1 1 1 1 1 1 ;; b0 - b7 
+   1 1 1 1 1 1 1 1 ;; b8 - bf 
+   1 1 1 1 1 1 1 1 ;; c0 - c7 
+   1 1 1 1 1 1 1 1 ;; c8 - cf 
+   1 1 1 1 1 1 1 1 ;; d0 - d7 
+   1 1 1 1 1 1 1 1 ;; d8 - df 
+   1 1 1 1 1 1 1 1 ;; e0 - e7 
+   1 1 1 1 1 1 1 1 ;; e8 - ef 
+   1 1 1 1 1 1 1 1 ;; f0 - f7 
+   1 1 1 1 1 1 1 1 ;; f8 - ff 
+   ])
+
+
+;; static PRUint32 HZ_st
+
+(defconst unicad-hz-state-table
+  (let ((eStart 0)
+        (eError 1)
+        (eItsMe 2))
+    (vector
+     eStart eError      3 eStart eStart eStart eError eError ;;00-07 
+     eError eError eError eError eItsMe eItsMe eItsMe eItsMe ;;08-0f 
+     eItsMe eItsMe eError eError eStart eStart      4 eError ;;10-17 
+          5 eError      6 eError      5      5      4 eError ;;18-1f 
+          4 eError      4      4      4 eError      4 eError ;;20-27 
+          4 eItsMe eStart eStart eStart eStart eStart eStart ;;28-2f 
+     )))
+
+;; static const PRUint32 HZCharLenTable[] = {0  0  0  0  0  0};
+
+(defconst unicad-hz-charlen-table
+  [0  0  0  0  0  0])
+
+(defvar unicad-hz-sm-model
+  (list
+   (cons 'classTable unicad-hz-class-table)
+   (cons 'classFactor 6)
+   (cons 'stateTable unicad-hz-state-table)
+   (cons 'charLenTable unicad-hz-charlen-table)
+   (cons 'name "HZ-GB-2312")))
+
+;;}}}
+
+;;{{{ iso-2022-cn state machine
+
+(defconst unicad-iso2022cn-class-table
+  [
+   2 0 0 0 0 0 0 0 ;; 00 - 07 
+   0 0 0 0 0 0 0 0 ;; 08 - 0f 
+   0 0 0 0 0 0 0 0 ;; 10 - 17 
+   0 0 0 1 0 0 0 0 ;; 18 - 1f 
+   0 0 0 0 0 0 0 0 ;; 20 - 27 
+   0 3 0 0 0 0 0 0 ;; 28 - 2f 
+   0 0 0 0 0 0 0 0 ;; 30 - 37 
+   0 0 0 0 0 0 0 0 ;; 38 - 3f 
+   0 0 0 4 0 0 0 0 ;; 40 - 47 
+   0 0 0 0 0 0 0 0 ;; 48 - 4f 
+   0 0 0 0 0 0 0 0 ;; 50 - 57 
+   0 0 0 0 0 0 0 0 ;; 58 - 5f 
+   0 0 0 0 0 0 0 0 ;; 60 - 67 
+   0 0 0 0 0 0 0 0 ;; 68 - 6f 
+   0 0 0 0 0 0 0 0 ;; 70 - 77 
+   0 0 0 0 0 0 0 0 ;; 78 - 7f 
+   2 2 2 2 2 2 2 2 ;; 80 - 87 
+   2 2 2 2 2 2 2 2 ;; 88 - 8f 
+   2 2 2 2 2 2 2 2 ;; 90 - 97 
+   2 2 2 2 2 2 2 2 ;; 98 - 9f 
+   2 2 2 2 2 2 2 2 ;; a0 - a7 
+   2 2 2 2 2 2 2 2 ;; a8 - af 
+   2 2 2 2 2 2 2 2 ;; b0 - b7 
+   2 2 2 2 2 2 2 2 ;; b8 - bf 
+   2 2 2 2 2 2 2 2 ;; c0 - c7 
+   2 2 2 2 2 2 2 2 ;; c8 - cf 
+   2 2 2 2 2 2 2 2 ;; d0 - d7 
+   2 2 2 2 2 2 2 2 ;; d8 - df 
+   2 2 2 2 2 2 2 2 ;; e0 - e7 
+   2 2 2 2 2 2 2 2 ;; e8 - ef 
+   2 2 2 2 2 2 2 2 ;; f0 - f7 
+   2 2 2 2 2 2 2 2 ;; f8 - ff 
+   ])
+
+
+(defconst unicad-iso2022cn-state-table
+  (let ((eStart 0)
+        (eError 1)
+        (eItsMe 2))
+    (vector
+     eStart      3 eError eStart eStart eStart eStart eStart ;;00-07 
+     eStart eError eError eError eError eError eError eError ;;08-0f 
+     eError eError eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe ;;10-17 
+     eItsMe eItsMe eItsMe eError eError eError      4 eError ;;18-1f 
+     eError eError eError eItsMe eError eError eError eError ;;20-27 
+     5      6 eError eError eError eError eError eError      ;;28-2f 
+     eError eError eError eItsMe eError eError eError eError ;;30-37 
+     eError eError eError eError eError eItsMe eError eStart ;;38-3f 
+     )))
+
+(defconst unicad-iso2022cn-charlen-table
+  [0  0  0  0  0  0])
+
+(defvar unicad-iso2022cn-sm-model
+  (list
+   (cons 'classTable unicad-iso2022cn-class-table)
+   (cons 'classFactor 9)
+   (cons 'stateTable unicad-iso2022cn-state-table)
+   (cons 'charLenTable unicad-iso2022cn-charlen-table)
+   (cons 'name "ISO-2022-CN")))
+
+;;}}}
+
+;;{{{ iso-2022-jp state machine
+
+(defconst unicad-iso2022jp-class-table
+  [
+   2 0 0 0 0 0 0 0 ;; 00 - 07 
+   0 0 0 0 0 0 2 2 ;; 08 - 0f 
+   0 0 0 0 0 0 0 0 ;; 10 - 17 
+   0 0 0 1 0 0 0 0 ;; 18 - 1f 
+   0 0 0 0 7 0 0 0 ;; 20 - 27 
+   3 0 0 0 0 0 0 0 ;; 28 - 2f 
+   0 0 0 0 0 0 0 0 ;; 30 - 37 
+   0 0 0 0 0 0 0 0 ;; 38 - 3f 
+   6 0 4 0 8 0 0 0 ;; 40 - 47 
+   0 9 5 0 0 0 0 0 ;; 48 - 4f 
+   0 0 0 0 0 0 0 0 ;; 50 - 57 
+   0 0 0 0 0 0 0 0 ;; 58 - 5f 
+   0 0 0 0 0 0 0 0 ;; 60 - 67 
+   0 0 0 0 0 0 0 0 ;; 68 - 6f 
+   0 0 0 0 0 0 0 0 ;; 70 - 77 
+   0 0 0 0 0 0 0 0 ;; 78 - 7f 
+   2 2 2 2 2 2 2 2 ;; 80 - 87 
+   2 2 2 2 2 2 2 2 ;; 88 - 8f 
+   2 2 2 2 2 2 2 2 ;; 90 - 97 
+   2 2 2 2 2 2 2 2 ;; 98 - 9f 
+   2 2 2 2 2 2 2 2 ;; a0 - a7 
+   2 2 2 2 2 2 2 2 ;; a8 - af 
+   2 2 2 2 2 2 2 2 ;; b0 - b7 
+   2 2 2 2 2 2 2 2 ;; b8 - bf 
+   2 2 2 2 2 2 2 2 ;; c0 - c7 
+   2 2 2 2 2 2 2 2 ;; c8 - cf 
+   2 2 2 2 2 2 2 2 ;; d0 - d7 
+   2 2 2 2 2 2 2 2 ;; d8 - df 
+   2 2 2 2 2 2 2 2 ;; e0 - e7 
+   2 2 2 2 2 2 2 2 ;; e8 - ef 
+   2 2 2 2 2 2 2 2 ;; f0 - f7 
+   2 2 2 2 2 2 2 2 ;; f8 - ff 
+   ])
+
+
+(defconst unicad-iso2022jp-state-table
+  (let ((eStart 0)
+        (eError 1)
+        (eItsMe 2))
+    (vector
+     eStart      3 eError eStart eStart eStart eStart eStart ;;00-07 
+     eStart eStart eError eError eError eError eError eError ;;08-0f 
+     eError eError eError eError eItsMe eItsMe eItsMe eItsMe ;;10-17 
+     eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eError eError ;;18-1f 
+     eError      5 eError eError eError      4 eError eError ;;20-27 
+     eError eError eError      6 eItsMe eError eItsMe eError ;;28-2f 
+     eError eError eError eError eError eError eItsMe eItsMe ;;30-37 
+     eError eError eError eItsMe eError eError eError eError ;;38-3f 
+     eError eError eError eError eItsMe eError eStart eStart ;;40-47 
+     )))
+
+(defconst unicad-iso2022jp-charlen-table
+  [0  0  0  0  0  0])
+
+(defvar unicad-iso2022jp-sm-model
+  (list
+   (cons 'classTable unicad-iso2022jp-class-table)
+   (cons 'classFactor 10)
+   (cons 'stateTable unicad-iso2022jp-state-table)
+   (cons 'charLenTable unicad-iso2022jp-charlen-table)
+   (cons 'name "ISO-2022-JP")))
+
+;;}}}
+
+;;{{{ iso-2022-kr state machine
+
+(defconst unicad-iso2022kr-class-table
+  [
+   2 0 0 0 0 0 0 0 ;; 00 - 07 
+   0 0 0 0 0 0 0 0 ;; 08 - 0f 
+   0 0 0 0 0 0 0 0 ;; 10 - 17 
+   0 0 0 1 0 0 0 0 ;; 18 - 1f 
+   0 0 0 0 3 0 0 0 ;; 20 - 27 
+   0 4 0 0 0 0 0 0 ;; 28 - 2f 
+   0 0 0 0 0 0 0 0 ;; 30 - 37 
+   0 0 0 0 0 0 0 0 ;; 38 - 3f 
+   0 0 0 5 0 0 0 0 ;; 40 - 47 
+   0 0 0 0 0 0 0 0 ;; 48 - 4f 
+   0 0 0 0 0 0 0 0 ;; 50 - 57 
+   0 0 0 0 0 0 0 0 ;; 58 - 5f 
+   0 0 0 0 0 0 0 0 ;; 60 - 67 
+   0 0 0 0 0 0 0 0 ;; 68 - 6f 
+   0 0 0 0 0 0 0 0 ;; 70 - 77 
+   0 0 0 0 0 0 0 0 ;; 78 - 7f 
+   2 2 2 2 2 2 2 2 ;; 80 - 87 
+   2 2 2 2 2 2 2 2 ;; 88 - 8f 
+   2 2 2 2 2 2 2 2 ;; 90 - 97 
+   2 2 2 2 2 2 2 2 ;; 98 - 9f 
+   2 2 2 2 2 2 2 2 ;; a0 - a7 
+   2 2 2 2 2 2 2 2 ;; a8 - af 
+   2 2 2 2 2 2 2 2 ;; b0 - b7 
+   2 2 2 2 2 2 2 2 ;; b8 - bf 
+   2 2 2 2 2 2 2 2 ;; c0 - c7 
+   2 2 2 2 2 2 2 2 ;; c8 - cf 
+   2 2 2 2 2 2 2 2 ;; d0 - d7 
+   2 2 2 2 2 2 2 2 ;; d8 - df 
+   2 2 2 2 2 2 2 2 ;; e0 - e7 
+   2 2 2 2 2 2 2 2 ;; e8 - ef 
+   2 2 2 2 2 2 2 2 ;; f0 - f7 
+   2 2 2 2 2 2 2 2 ;; f8 - ff 
+   ])
+
+
+(defconst unicad-iso2022kr-state-table
+  (let ((eStart 0)
+        (eError 1)
+        (eItsMe 2))
+    (vector
+     eStart      3 eError eStart eStart eStart eError eError ;;00-07 
+     eError eError eError eError eItsMe eItsMe eItsMe eItsMe ;;08-0f 
+     eItsMe eItsMe eError eError eError      4 eError eError ;;10-17 
+     eError eError eError eError      5 eError eError eError ;;18-1f 
+     eError eError eError eItsMe eStart eStart eStart eStart ;;20-27 
+     )))
+
+(defconst unicad-iso2022kr-charlen-table
+  [0  0  0  0  0  0])
+
+(defvar unicad-iso2022kr-sm-model
+  (list
+   (cons 'classTable unicad-iso2022kr-class-table)
+   (cons 'classFactor 6)
+   (cons 'stateTable unicad-iso2022kr-state-table)
+   (cons 'charLenTable unicad-iso2022kr-charlen-table)
+   (cons 'name "ISO-2022-KR")))
+
+;;}}}
+
+(provide 'unicad)
+;;; unicad.el ends here
