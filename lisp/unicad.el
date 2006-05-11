@@ -3,8 +3,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;;
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-05-10 00:06:20>
-;; Version: v0.62
+;; Time-stamp: <2007-05-10 00:08:51>
+;; Version: v0.63
 ;; Keywords: coding-system, auto-coding-functions
 ;; X-URL: http://jasonal.blogspot.com/2007/02/unicadel.html
 
@@ -80,6 +80,7 @@
 ;; http://www.mozilla.org/projects/intl/ChardetInterface.htm
 ;;
 ;; Changelog
+;; v0.63 changed the threhold in unicad-dist-table-get-confidence
 ;; v0.62 allow esc(0x1B) as legal value in utf-8, gb18030, sjis, big5, euckr
 ;; v0.61 add a unicad-quick-multibyte-words, increase unicad-quick-size to 500
 ;;       add support for sjis single byte only katakana files
@@ -106,10 +107,11 @@
 
 (defvar unicad-threshold 0.95)
 (defvar unicad-data-threshold 1024)
-(defvar unicad-minimum-data-threshold 2)
+(defvar unicad-minimum-data-threshold 1)
 (defvar unicad-minimum-size-threshold 10)
 
-(defvar unicad-prefer nil "set preference encoding system")
+(defvar unicad-cjk-prefer nil
+  "set preference encoding system (only for chinese, japanese, korean coding systems.)")
 
 (defconst unicad--sure-yes 0.99)
 (defconst unicad--sure-no 0.01)
@@ -619,6 +621,7 @@ japanese, korean"
         (code0 0) (code1 0)
         (size (- end start))
         (mb-num 0)                      ;number of multi-byte words
+        (mCodingSystem (cdr (assoc 'name model)))
         codingState charlen)
     (unicad-sm-reset)
     (unicad-dist-table-reset dist-table)
@@ -648,7 +651,8 @@ japanese, korean"
          (t nil))
         (setq code0 code1))
       (if (eq mState 'eDetecting)
-          (if (and (> (setq mConfidence (unicad-dist-table-get-confidence dist-table dist-ratio size))
+          (if (and (> (setq mConfidence (unicad-dist-table-get-confidence dist-table dist-ratio size
+                                                                          (eq unicad-cjk-prefer mCodingSystem)))
                       unicad-threshold)
                    (> (unicad-dist-table-total-chars dist-table)
                       unicad-data-threshold))
@@ -1302,7 +1306,7 @@ no validation needed here. State machine has done that"
    (cons 'classFactor 16)
    (cons 'stateTable unicad-utf8-state-table)
    (cons 'charLenTable unicad-utf8-charlen-table)
-   (cons 'name "UTF-8")))
+   (cons 'name 'utf-8)))
 ;;}}}
 
 ;;{{{  gb18030 state machine
@@ -1364,11 +1368,12 @@ no validation needed here. State machine has done that"
       [0  1  1  1  1  1  2])
 
 (defvar unicad-gb18030-sm-model
-  `((classTable . ,unicad-gb18030-class-table)
-    (classFactor . 7 )
-    (stateTable . ,unicad-gb18030-state-table)
-    (charLenTable . ,unicad-gb18030-charlen-table)
-    (name . "GB18030" )))
+  (list
+   (cons 'classTable  unicad-gb18030-class-table)
+   (cons 'classFactor  7 )
+   (cons 'stateTable  unicad-gb18030-state-table)
+   (cons 'charLenTable  unicad-gb18030-charlen-table)
+   (cons 'name 'gb18030)))
 
 ;;}}}
 
@@ -1424,11 +1429,12 @@ no validation needed here. State machine has done that"
   [0  1  1  2  0])
 
 (defvar unicad-big5-sm-model
-  `((classTable . ,unicad-big5-class-table)
-    (classFactor . 5)
-    (stateTable . ,unicad-big5-state-table)
-    (charLenTable . ,unicad-big5-charlen-table)
-    (name . "Big5")))
+  (list
+   (cons 'classTable  unicad-big5-class-table)
+   (cons 'classFactor  5)
+   (cons 'stateTable  unicad-big5-state-table)
+   (cons 'charLenTable  unicad-big5-charlen-table)
+   (cons 'name  'big5)))
 ;;}}}
 
 ;;{{{  sjis state machine
@@ -1486,11 +1492,12 @@ no validation needed here. State machine has done that"
   [0  1  1  2  0  0])
 
 (defvar unicad-sjis-sm-model
-  `((classTable . ,unicad-sjis-class-table)
-    (classFactor . 6 )
-    (stateTable . ,unicad-sjis-state-table)
-    (charLenTable . ,unicad-sjis-charlen-table)
-    (name . "Shift_JIS" )))
+  (list
+   (cons 'classTable  unicad-sjis-class-table)
+   (cons 'classFactor  6 )
+   (cons 'stateTable  unicad-sjis-state-table)
+   (cons 'charLenTable  unicad-sjis-charlen-table)
+   (cons 'name 'sjis)))
 ;;}}}
 
 ;;{{{  eucjp state machine
@@ -1548,11 +1555,12 @@ no validation needed here. State machine has done that"
   [2  2  2  3  1  0])
 
 (defvar unicad-eucjp-sm-model
-  `((classTable . ,unicad-eucjp-class-table)
-    (classFactor . 6 )
-    (stateTable . ,unicad-eucjp-state-table)
-    (charLenTable . ,unicad-eucjp-charlen-table)
-    (name . "EUC-JP" )))
+  (list
+   (cons 'classTable  unicad-eucjp-class-table)
+   (cons 'classFactor  6 )
+   (cons 'stateTable  unicad-eucjp-state-table)
+   (cons 'charLenTable  unicad-eucjp-charlen-table)
+   (cons 'name 'euc-jp)))
 ;;}}}
 
 ;;{{{  euckr state machine
@@ -1607,12 +1615,13 @@ no validation needed here. State machine has done that"
 (defvar unicad-euckr-charlen-table
   [0  1  2  0])
 
-(defvar  unicad-euckr-sm-model
-  `((classTable . ,unicad-euckr-class-table)
-    (classFactor . 4 )
-    (stateTable . ,unicad-euckr-state-table)
-    (charLenTable . ,unicad-euckr-charlen-table)
-    (name . "EUC-KR" )))
+(defvar unicad-euckr-sm-model
+  (list
+   (cons 'classTable  unicad-euckr-class-table)
+   (cons 'classFactor  4 )
+   (cons 'stateTable  unicad-euckr-state-table)
+   (cons 'charLenTable  unicad-euckr-charlen-table)
+   (cons 'name 'euc-kr)))
 ;;}}}
 
 ;;{{{  euctw state machine
@@ -1670,11 +1679,12 @@ no validation needed here. State machine has done that"
       [0  0  1  2  2  2  3])
 
 (defvar unicad-euctw-sm-model
-  `((classTable . ,unicad-euctw-class-table)
-    (classFactor . 7 )
-    (stateTable . ,unicad-euctw-state-table)
-    (charLenTable . ,unicad-euctw-charlen-table)
-    (name . "x-euc-tw" )))
+  (list
+   (cons 'classTable  unicad-euctw-class-table)
+   (cons 'classFactor  7 )
+   (cons 'stateTable  unicad-euctw-state-table)
+   (cons 'charLenTable  unicad-euctw-charlen-table)
+   (cons 'name  'euc-tw)))
 ;;}}}
 
 ;;{{{  latin1 state machine
@@ -1903,15 +1913,15 @@ no validation needed here. State machine has done that"
 (defsubst unicad-dist-table-freq-chars++ (dist-table)
   (setcdr dist-table (1+ (cdr dist-table))))
 
-(defun unicad-dist-table-get-confidence (dist-table dist-ratio size)
+(defun unicad-dist-table-get-confidence (dist-table dist-ratio size &optional prefer)
   (let ((Confidence 0.0)
         (total-chars (unicad-dist-table-total-chars dist-table))
         (freq-chars (unicad-dist-table-freq-chars dist-table)))
     ;;(message "tot: %d, freq: %d, size %d" total-chars freq-chars size)
     (cond
      ((and (> size unicad-minimum-size-threshold)
-           (or (<= total-chars (- (/ unicad-minimum-size-threshold 2) 2))    ;; this was `0'
-               (<= freq-chars unicad-minimum-data-threshold)))
+           (or (<= total-chars (- (/ unicad-minimum-size-threshold 2) 4))    ;; this was `0'
+               (< freq-chars unicad-minimum-data-threshold)))
       (setq Confidence unicad--sure-no))
      ((/= total-chars freq-chars)
       (setq Confidence (min (/ freq-chars (* (- total-chars freq-chars) dist-ratio))
