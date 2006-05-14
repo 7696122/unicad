@@ -3,7 +3,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;;
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-05-14 00:11:45>
+;; Time-stamp: <2006-05-14 13:06:00>
 ;; Version: v0.64
 ;; Keywords: coding-system, auto-coding-functions
 ;; X-URL: http://jasonal.blogspot.com/2007/02/unicadel.html
@@ -80,7 +80,7 @@
 ;; http://www.mozilla.org/projects/intl/ChardetInterface.htm
 ;;
 ;; Changelog
-;; v0.64 add support for traditional chinese encoded in gbk
+;; v0.64 add support for traditional chinese encoded in gbk 
 ;; v0.63 changed the threhold in unicad-dist-table-get-confidence
 ;; v0.62 allow esc(0x1B) as legal value in utf-8, gb18030, sjis, big5, euckr
 ;; v0.61 add a unicad-quick-multibyte-words, increase unicad-quick-size to 500
