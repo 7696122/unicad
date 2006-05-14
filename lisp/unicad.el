@@ -3,8 +3,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;;
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-05-10 00:08:51>
-;; Version: v0.63
+;; Time-stamp: <2007-05-14 00:11:45>
+;; Version: v0.64
 ;; Keywords: coding-system, auto-coding-functions
 ;; X-URL: http://jasonal.blogspot.com/2007/02/unicadel.html
 
@@ -80,6 +80,7 @@
 ;; http://www.mozilla.org/projects/intl/ChardetInterface.htm
 ;;
 ;; Changelog
+;; v0.64 add support for traditional chinese encoded in gbk
 ;; v0.63 changed the threhold in unicad-dist-table-get-confidence
 ;; v0.62 allow esc(0x1B) as legal value in utf-8, gb18030, sjis, big5, euckr
 ;; v0.61 add a unicad-quick-multibyte-words, increase unicad-quick-size to 500
@@ -577,6 +578,7 @@ chardet and return the best guess."
     [euc-jp 0 unicad-eucjp-prober]
     [euc-kr 0 unicad-euckr-prober]
     [euc-tw 0 unicad-euctw-prober]
+    [,unicad-chosen-gb-coding-system 0 unicad-gbkcht-prober]
     [utf-8 0 unicad-utf8-prober]
     [utf-16-le 0 unicad-ucs2le-prober]
     [utf-16-be 0 unicad-ucs2be-prober])
@@ -974,7 +976,27 @@ no validation needed here.  State machine has done that"
         (if (and (< order unicad-gb2312-table-size)
                  (<= (aref unicad-gb2312-char-freq-order order) 512))
             (unicad-dist-table-freq-chars++ unicad-gb2312-dist-table))))))
+
 ;;}}}
+
+;;;{{{ gbkcht prober
+;; use gbk state machine but use big5 analyser
+(defvar unicad-gbkcht-list (unicad-chardet unicad-multibyte-group-list 'unicad-gbkcht-prober))
+(defvar unicad-big5-dist-table '(0 . 0))
+(defsubst unicad-gbkcht-prober (start end)
+  (unicad-cjk-prober start end unicad-gbkcht-list
+                   unicad-gb18030-sm-model unicad-big5-dist-table
+                   unicad-big5-dist-ratio 'unicad-gbkcht-analyser))
+
+
+(defun unicad-gbkcht-analyser (ch0 ch1)
+  "we convert the gbk code into big5, than use `unicad-big5-analyser' to get the order"
+  (let ((bar (encode-coding-char (decode-char 'chinese-gbk (+ (* 256 ch0) ch1)) 'big5)))
+    (let ((chr0 (string-to-char (substring bar 0)))
+          (chr1 (string-to-char (substring bar 1))))
+      (unicad-big5-analyser chr0 chr1))))
+
+;;;}}}
 
 ;;{{{  big5 prober
 (defvar unicad-big5-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5-prober))
@@ -2518,6 +2540,7 @@ no validation needed here. State machine has done that"
  890 3669 3943 5791 1878 3798 3439 5792 2186 2358 3440 1652 5793 5794 5795  941
 2299  208 3546 4161 2020  330 4438 3944 2906 2499 3799 4439 4811 5796 5797 5798
 ])
+
 ;;}}}
 
 ;;{{{  jis freq table
