@@ -1,4 +1,65 @@
-(provide 'eucad)
+;;; unicad.el --- an elisp port of Mozilla Universal Charset Auto Detector
+
+;; Copyright 2006 Qichen Huang
+;;
+;; Author: jasonal00@gmail.com
+;; Time-stamp: <2006-12-01 22:25:53>
+;; Version: v0.2
+;; Keywords: 
+;; X-URL: not distributed yet
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 2, or (at your option)
+;; any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
+;; You should have received a copy of the GNU General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+;;; Commentary:
+
+;; 
+
+;; Put this file into your load-path and the following into your ~/.emacs:
+;;   (require 'unicad)
+
+;; Following coding systems are involved:
+;;  - (ascii)
+;;  - multibyte coding systems:
+;;    - utf-8
+;;    - gb18030 (gb2312)
+;;    - big5
+;;    - sjis
+;;    - euc-jp
+;;    - euc-kr
+;;    - euc-tw
+;;  - latin-1
+
+;; Follows are planned to be involved in next version:
+;;  - (BOM detector)
+;;  - greek
+;;  - cyrillic
+;;  - hebrew
+;;  - bulgarian
+;;  - hungarian
+;;  - thai
+;;  - iso-2022
+;;  - hz
+
+;; This is an elisp port of Universal Charset Detector. For more information
+;; about Mozilla Universal Charset Detector, please refer to:
+;; http://www.mozilla.org/projects/intl/ChardetInterface.htm
+;;
+;;; Code:
+
+
+(provide 'unicad)
 (eval-when-compile
   (require 'cl))
 
@@ -6,44 +67,39 @@
 (defvar chardet-max-size 10000
   "The max size to scan.")
 
-;;(setq chardet-max-size 5000)
+(setq chardet-max-size 5000)
 
-(defvar chardet-max-count 100
-  "If the counter of certain coding system arrive this number, then
-use this coding system.")
-
-(defvar chardet-min-char/count 2
-  "The minimum top chars in this number of characters")
 
 (defvar SHORTCUT_THRESHOLD 0.95)
 (defvar MINIMUM_DATA_THRESHOLD 4)
+(setq MINIMUM_DATA_THRESHOLD 2)
 (defvar ENOUGH_DATA_THRESHOLD 1024)
 (defvar MINIMUM_FILE_SIZE 7)
 
-(defvar EUCTW_TABLE_SIZE   nil)
-(defvar EUCKR_TABLE_SIZE   nil)
-(defvar GB2312_TABLE_SIZE  nil)
-(defvar GB18030_TABLE_SIZE nil)
-(defvar BIG5_TABLE_SIZE    nil)
-(defvar JIS_TABLE_SIZE     nil)
-(defvar EUCJP_TABLE_SIZE   nil)
-;; ;; EUCJP = JIS
+;; (defvar EUCTW_TABLE_SIZE   nil)
+;; (defvar EUCKR_TABLE_SIZE   nil)
+;; (defvar GB2312_TABLE_SIZE  nil)
+;; (defvar GB18030_TABLE_SIZE nil)
+;; (defvar BIG5_TABLE_SIZE    nil)
+;; (defvar JIS_TABLE_SIZE     nil)
+;; (defvar EUCJP_TABLE_SIZE   nil)
+;; ;; ;; EUCJP = JIS
 
-(defvar EUCTW_DIST_RATIO   nil)
-(defvar EUCKR_DIST_RATIO   nil)
-(defvar GB2312_DIST_RATIO  nil)
-(defvar GB18030_DIST_RATIO nil)
-(defvar BIG5_DIST_RATIO    nil)
-(defvar JIS_DIST_RATIO     nil)
-(defvar EUCJP_DIST_RATIO   nil)
+;; (defvar EUCTW_DIST_RATIO   nil)
+;; (defvar EUCKR_DIST_RATIO   nil)
+;; (defvar GB2312_DIST_RATIO  nil)
+;; (defvar GB18030_DIST_RATIO nil)
+;; (defvar BIG5_DIST_RATIO    nil)
+;; (defvar JIS_DIST_RATIO     nil)
+;; (defvar EUCJP_DIST_RATIO   nil)
 
-(defvar EUCTWCharToFreqOrder   nil)
-(defvar EUCKRCharToFreqOrder   nil)
-(defvar GB2312CharToFreqOrder  nil)
-(defvar GB18030CharToFreqOrder nil)
-(defvar BIG5CharToFreqOrder    nil)
-(defvar JISCharToFreqOrder     nil)
-(defvar EUCJPCharToFreqOrder   nil)
+;; (defvar EUCTWCharToFreqOrder   nil)
+;; (defvar EUCKRCharToFreqOrder   nil)
+;; (defvar GB2312CharToFreqOrder  nil)
+;; (defvar GB18030CharToFreqOrder nil)
+;; (defvar BIG5CharToFreqOrder    nil)
+;; (defvar JISCharToFreqOrder     nil)
+;; (defvar EUCJPCharToFreqOrder   nil)
 
 (defsubst chardet-reset-vars ()
   (dolist (coding fenc-coding-list)
@@ -57,13 +113,13 @@ use this coding system.")
 
 (defvar debug-code nil)
 (defvar debug-now nil)
-(setq debug-now nil)
+;; (setq debug-now nil)
 
 (defvar debug-uni nil)
-(setq debug-uni nil)
+;; (setq debug-uni nil)
 
-(defvar quick-size nil)
-(setq quick-size 100)
+(defvar quick-size 100)
+;;(setq quick-size 1000)
 
 
 (defun universal-charset-detect (size)
@@ -71,7 +127,8 @@ use this coding system.")
   (make-variable-buffer-local 'buffer-file-coding-system)
   (setq debug-code buffer-file-coding-system)
   (when (not (or (eq buffer-file-coding-system 'utf-8-unix)
-                 (eq buffer-file-coding-system 'utf-8-dos)))
+                 (eq buffer-file-coding-system 'utf-8-dos)
+                 (eq buffer-file-coding-system 'utf-8-mac)))
     (save-excursion
       (let ((end (+ (point) (min size chardet-max-size)))
             (input-state 'ePureAscii)
@@ -164,122 +221,7 @@ use this coding system.")
 
 
 
-;; multi-byte-group-prober
-;; includes:
-;;  - utf-8
-;;  - sjis
-;;  - eucjp
-;;  - gb18030
-;;  - euckr
-;;  - big5
-;;  - euctw
 
-(defvar multibyte-group-list nil)
-(setq multibyte-group-list
-      (list multibyte-utf8-list))
-;;(setq multibyte-group-list (list multibyte-gb18030-list multibyte-big5-list multibyte-utf8-list))
-
-;; (setq multibyte-group-list (list multibyte-utf8-list))
-;; (length multibyte-group-list)
-(setq multibyte-group-list (append multibyte-group-list (list multibyte-gb18030-list)))
-(setq multibyte-group-list (append multibyte-group-list (list multibyte-big5-list)))
-(setq multibyte-group-list (append multibyte-group-list (list multibyte-sjis-list)))
-(setq multibyte-group-list (append multibyte-group-list (list multibyte-eucjp-list)))
-(setq multibyte-group-list (append multibyte-group-list (list multibyte-euckr-list)))
-(setq multibyte-group-list (append multibyte-group-list (list multibyte-euctw-list)))
-;; (pop multibyte-group-list)
-;; (setq multibyte-gb-list
-;;       '(gb 0.0 test-func))
-;; (add-to-list 'multibyte-group-list multibyte-gb-list)
-;; (setq multibyte-utf8-list
-;;       '(utf-8 0.0 mult))
-;; (push 'utf-8 multibyte-utf8-list)
-;; (setq test multibyte-group-list)
-;; (setq test2 (pop test))
-;; (multibyte-chardec-get-prober test2)
-;; (symbolp test2)
-
-;; (car (car multibyte-group-list))
-
-(defvar multibyte-bestguess nil)
-
-(setq multibyte-bestguess '(nil 0.0))
-
-(defun multibyte-group-prober (start end)
-  (let ((lists multibyte-group-list)
-        (mState 'eDetecting)
-        st
-        current-chardec
-        mBestGuess
-        (bestConf 0.0)
-        cf)
-    (setq debug-code 'mb-group-start)
-    (setq multibyte-bestguess '(nil 0.0))
-    (while (and lists (eq mState 'eDetecting))
-      ;;(setq lists multibyte-group-list)
-      (setq current-chardec (pop lists))
-      ;;(setq debug-code current-chardec)
-      ;;(setq st (funcall (multibyte-chardec-get-prober current-chardec) start end))
-      (setq st (condition-case e
-                   (save-excursion
-                     (funcall (multibyte-chardec-get-prober current-chardec) start end))))
-      (setq debug-code (list current-chardec mState lists))
-      (cond
-       ((eq st 'eFoundIt)
-        (setq mBestGuess (multibyte-chardec-get-name current-chardec))
-        (setq bestConf 0.99)
-        (setq mState 'eFoundIt))
-       ((eq st 'eNotMe)
-        nil)
-       (t
-        (setq cf (multibyte-chardec-get-confidence current-chardec))
-        (if (> cf bestConf)
-            (progn
-              (setq mBestGuess (multibyte-chardec-get-name current-chardec))
-              (setq bestConf cf))))))
-    (if (or (= bestConf 0.0) (null mBestGuess))
-        (setq mState 'eNotMe)
-      (setq multibyte-bestguess (list mBestGuess bestConf)))
-    mState))
-
-;; distribution table
-
-(defmacro dist-table-reset (dist-table)
-  `(progn
-     (setcdr (assoc 'mTotalChars ,dist-table) 0)
-     (setcdr (assoc 'mFreqChars ,dist-table) 0)))
-
-;; (dist-table-reset GB18030-dist-table)
-
-(defmacro dist-table-total-chars (dist-table)
-  `(cdr (assoc 'mTotalChars ,dist-table)))
-
-(defmacro mTotalChars (dist-table)
-  `(cdr (assoc 'mTotalChars ,dist-table)))
-
-(defmacro dist-table-freq-chars (dist-table)
-  `(cdr (assoc 'mFreqChars ,dist-table)))
-
-(defmacro mFreqChars (dist-table)
-  `(cdr (assoc 'mFreqChars ,dist-table)))
-
-(defmacro dist-table-total-chars++ (dist-table)
-  `(setcdr (assoc 'mTotalChars ,dist-table) (1+ (dist-table-total-chars ,dist-table))))
-
-(defmacro mTotalChars++ (dist-table)
-  `(setcdr (assoc 'mTotalChars ,dist-table) (1+ (dist-table-total-chars ,dist-table))))
-
-;;(mTotalChars++ GB18030-dist-table)
-
-(defmacro dist-table-freq-chars++ (dist-table)
-  `(setcdr (assoc 'mFreqChars ,dist-table) (1+ (dist-table-freq-chars ,dist-table))))
-
-(defmacro mFreqChars++ (dist-table)
-  `(setcdr (assoc 'mFreqChars ,dist-table) (1+ (dist-table-freq-chars ,dist-table))))
-
-;; (dist-table-freq-chars++ GB18030-dist-table)
-
-
 ;; utf-8-prober
 
 
@@ -628,8 +570,8 @@ use this coding system.")
       mState)))
 
 ;;for sjis encoding, we are interested 
-;;  first  byte range: 0x81 -- 0x9f , 0xe0 -- 0xfe
-;;  second byte range: 0x40 -- 0x7e,  0x81 -- 0xfe
+;;  first  byte range: 0x81 -- 0x9f , 0xe0 -- 0xef
+;;  second byte range: 0x40 -- 0x7e,  0x80 -- 0xfc
 ;;no validation needed here. State machine has done that
 (defun DistAnalyse-SJIS (ch0 ch1)
   (let ((order -1))
@@ -640,7 +582,7 @@ use this coding system.")
       (setq order (* 188 (+ (- ch0 #xe0) 31)))))
     (when (>= order 0)
       (setq order (+ order (- ch1 #x40)))
-      (if (> ch0 #x7f)
+      (if (> ch1 #x7f)                  ;huangq! corrected. was ch0
           (setq order (1- order))))
     (when (>= order 0)
       (mTotalChars++ SJIS-dist-table)
@@ -954,21 +896,136 @@ use this coding system.")
   ))
 
 
+;; multi-byte-group-prober
+;; includes:
+;;  - utf-8
+;;  - sjis
+;;  - eucjp
+;;  - gb18030
+;;  - euckr
+;;  - big5
+;;  - euctw
+
+(defvar multibyte-group-list nil)
+(setq multibyte-group-list
+      (list multibyte-utf8-list))
+;;(setq multibyte-group-list (list multibyte-gb18030-list multibyte-big5-list multibyte-utf8-list))
+
+;; (setq multibyte-group-list (list multibyte-utf8-list))
+;; (length multibyte-group-list)
+(setq multibyte-group-list (append multibyte-group-list (list multibyte-gb18030-list)))
+(setq multibyte-group-list (append multibyte-group-list (list multibyte-big5-list)))
+(setq multibyte-group-list (append multibyte-group-list (list multibyte-sjis-list)))
+(setq multibyte-group-list (append multibyte-group-list (list multibyte-eucjp-list)))
+(setq multibyte-group-list (append multibyte-group-list (list multibyte-euckr-list)))
+(setq multibyte-group-list (append multibyte-group-list (list multibyte-euctw-list)))
+;; (pop multibyte-group-list)
+;; (setq multibyte-gb-list
+;;       '(gb 0.0 test-func))
+;; (add-to-list 'multibyte-group-list multibyte-gb-list)
+;; (setq multibyte-utf8-list
+;;       '(utf-8 0.0 mult))
+;; (push 'utf-8 multibyte-utf8-list)
+;; (setq test multibyte-group-list)
+;; (setq test2 (pop test))
+;; (multibyte-chardec-get-prober test2)
+;; (symbolp test2)
+
+;; (car (car multibyte-group-list))
+
+(defvar multibyte-bestguess nil)
+
+(setq multibyte-bestguess '(nil 0.0))
+
+(defun multibyte-group-prober (start end)
+  (let ((lists multibyte-group-list)
+        (mState 'eDetecting)
+        st
+        current-chardec
+        mBestGuess
+        (bestConf 0.0)
+        cf)
+    (setq debug-code 'mb-group-start)
+    (setq multibyte-bestguess '(nil 0.0))
+    (while (and lists (eq mState 'eDetecting))
+      ;;(setq lists multibyte-group-list)
+      (setq current-chardec (pop lists))
+      ;;(setq debug-code current-chardec)
+      ;;(setq st (funcall (multibyte-chardec-get-prober current-chardec) start end))
+      (setq st (condition-case e
+                   (save-excursion
+                     (funcall (multibyte-chardec-get-prober current-chardec) start end))))
+      (setq debug-code (list current-chardec mState lists))
+      (cond
+       ((eq st 'eFoundIt)
+        (setq mBestGuess (multibyte-chardec-get-name current-chardec))
+        (setq bestConf 0.99)
+        (setq mState 'eFoundIt))
+       ((eq st 'eNotMe)
+        nil)
+       (t
+        (setq cf (multibyte-chardec-get-confidence current-chardec))
+        (if (> cf bestConf)
+            (progn
+              (setq mBestGuess (multibyte-chardec-get-name current-chardec))
+              (setq bestConf cf))))))
+    (if (or (= bestConf 0.0) (null mBestGuess))
+        (setq mState 'eNotMe)
+      (setq multibyte-bestguess (list mBestGuess bestConf)))
+    mState))
+
+;; distribution table
+
+(defmacro dist-table-reset (dist-table)
+  `(progn
+     (setcdr (assoc 'mTotalChars ,dist-table) 0)
+     (setcdr (assoc 'mFreqChars ,dist-table) 0)))
+
+;; (dist-table-reset GB18030-dist-table)
+
+(defmacro dist-table-total-chars (dist-table)
+  `(cdr (assoc 'mTotalChars ,dist-table)))
+
+(defmacro mTotalChars (dist-table)
+  `(cdr (assoc 'mTotalChars ,dist-table)))
+
+(defmacro dist-table-freq-chars (dist-table)
+  `(cdr (assoc 'mFreqChars ,dist-table)))
+
+(defmacro mFreqChars (dist-table)
+  `(cdr (assoc 'mFreqChars ,dist-table)))
+
+(defmacro dist-table-total-chars++ (dist-table)
+  `(setcdr (assoc 'mTotalChars ,dist-table) (1+ (dist-table-total-chars ,dist-table))))
+
+(defmacro mTotalChars++ (dist-table)
+  `(setcdr (assoc 'mTotalChars ,dist-table) (1+ (dist-table-total-chars ,dist-table))))
+
+;;(mTotalChars++ GB18030-dist-table)
+
+(defmacro dist-table-freq-chars++ (dist-table)
+  `(setcdr (assoc 'mFreqChars ,dist-table) (1+ (dist-table-freq-chars ,dist-table))))
+
+(defmacro mFreqChars++ (dist-table)
+  `(setcdr (assoc 'mFreqChars ,dist-table) (1+ (dist-table-freq-chars ,dist-table))))
+
+;; (dist-table-freq-chars++ GB18030-dist-table)
+
+
 ;; Latin-1 prober
+ 
+(defvar UDF    0)        ;; undefined
+(defvar OTH    1)        ;; other
+(defvar ASC    2)        ;; ascii capital letter
+(defvar ASS    3)        ;; ascii small letter
+(defvar ACV    4)        ;; accent capital vowel
+(defvar ACO    5)        ;; accent capital other
+(defvar ASV    6)        ;; accent small vowel
+(defvar ASO    7)        ;; accent small other
+(defvar CLASS_NUM  8)   ;; total classes
 
-(setq 
- UDF    0        ;; undefined
- OTH    1        ;; other
- ASC    2        ;; ascii capital letter
- ASS    3        ;; ascii small letter
- ACV    4        ;; accent capital vowel
- ACO    5        ;; accent capital other
- ASV    6        ;; accent small vowel
- ASO    7        ;; accent small other
- CLASS_NUM  8)   ;; total classes
 
-
-(setq Latin1_CharToClass 
+(defvar Latin1_CharToClass 
 `[
   ,OTH  ,OTH  ,OTH  ,OTH  ,OTH  ,OTH  ,OTH  ,OTH    ;; 00 - 07
   ,OTH  ,OTH  ,OTH  ,OTH  ,OTH  ,OTH  ,OTH  ,OTH    ;; 08 - 0F
@@ -1009,7 +1066,7 @@ use this coding system.")
 ;;    2 : normal 
 ;;    3 : very likely
 
-(setq Latin1ClassModel
+(defvar Latin1ClassModel
 [
 ;; UDF OTH ASC ASS ACV ACO ASV ASO  
     0   0   0   0   0   0   0   0   ;; UDF
@@ -1021,9 +1078,6 @@ use this coding system.")
     0   3   1   3   1   1   1   3   ;; ASV
     0   3   1   3   1   1   3   3   ;; ASO
 ])
-
-(setq charClass (aref Latin1_CharToClass #x45))
-(setq freq (aref Latin1ClassModel (+ (* ASS CLASS_NUM) charClass)))
 
 (defvar debug-latin1 nil)
 
@@ -1075,7 +1129,7 @@ use this coding system.")
             (setq confidence 0.0))
         (setq confidence (* confidence 0.5))
         ))
-    (message "Confidence of Latin-1: %f" confidence)
+;;    (message "Confidence of Latin-1: %f" confidence)
     confidence
     ))
 
@@ -1141,7 +1195,7 @@ use this coding system.")
 (defvar eError 1)
 (defvar eItsMe 2)
 
-(setq coding-state-machine
+(defvar coding-state-machine
       `((mState . ,eStart)
         (mCharLen . 0)
         (mBytePos . 0)))
@@ -1195,33 +1249,26 @@ use this coding system.")
 
 ;; was defined as enum nsSMState
 ;; in nsCodingStateMachine.h
-(setq eStart 0
-      eError 1
-      eItsMe 2)
+(defvar eStart 0)
+(defvar eError 1)
+(defvar eItsMe 2)
 
-(setq 
- eIdxSft4bits    3
- eIdxSft8bits    2
- eIdxSft16bits   1
- )
+(defvar eIdxSft4bits    3)
+(defvar eIdxSft8bits    2)
+(defvar eIdxSft16bits   1)
 
-(setq 
- eSftMsk4bits    7
- eSftMsk8bits    3
- eSftMsk16bits   1
- )
+(defvar eSftMsk4bits    7)
+(defvar eSftMsk8bits    3)
+(defvar eSftMsk16bits   1)
+ 
+(defvar eBitSft4bits    2)
+(defvar eBitSft8bits    3)
+(defvar eBitSft16bits   4)
 
-(setq 
- eBitSft4bits    2
- eBitSft8bits    3
- eBitSft16bits   4
- )
+(defvar eUnitMsk4bits    #x0000000F)
+(defvar eUnitMsk8bits    #x000000FF)
+(defvar eUnitMsk16bits   #x0000FFFF)
 
-(setq 
- eUnitMsk4bits    #x0000000F
- eUnitMsk8bits    #x000000FF
- eUnitMsk16bits   #x0000FFFF
- )
 
   ;; (setq struct nsPkgInt {
   ;;   nsIdxSft  idxsft
@@ -1233,7 +1280,7 @@ use this coding system.")
 
   ;; Big5 
 
-(setq BIG5_cls 
+(defvar BIG5_cls 
       `[
         ;;(PCK4BITS 0 1 1 1 1 1 1 1)   ;; 00 - 07 
         ,(PCK4BITS 1 1 1 1 1 1 1 1) ;; 00 - 07    ;;allow #x00 as legal value
@@ -1272,14 +1319,14 @@ use this coding system.")
 
 
 
-(setq BIG5_st 
+(defvar BIG5_st 
       `[
         ,(PCK4BITS eError eStart eStart      3 eError eError eError eError) ;;00-07 
         ,(PCK4BITS eError eError eItsMe eItsMe eItsMe eItsMe eItsMe eError) ;;08-0f 
         ,(PCK4BITS eError eStart eStart eStart eStart eStart eStart eStart) ;;10-17 
         ])
 
-(setq Big5CharLenTable
+(defvar Big5CharLenTable
       [0  1  1  2  0])
 
   ;; (setq Big5SMModel   `[
@@ -1290,7 +1337,7 @@ use this coding system.")
   ;;                      "Big5" 
   ;;                      ])
 
-(setq Big5SMModel   `(
+(defvar Big5SMModel   `(
                       (classTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,BIG5_cls])
                       (classFactor . 5)
                       (stateTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,BIG5_st])
@@ -1298,7 +1345,7 @@ use this coding system.")
                       (name . "Big5")
                       ))
 
-(setq EUCJP_cls 
+(defvar EUCJP_cls 
       `[
         ;;,(PCK4BITS 5 4 4 4 4 4 4 4)   ;; 00 - 07 
         ,(PCK4BITS 4 4 4 4 4 4 4 4)   ;; 00 - 07 
@@ -1336,7 +1383,7 @@ use this coding system.")
         ])
 
 
-(setq EUCJP_st 
+(defvar EUCJP_st 
       `[
         ,(PCK4BITS      3      4      3      5 eStart eError eError eError) ;;00-07 
         ,(PCK4BITS eError eError eError eError eItsMe eItsMe eItsMe eItsMe) ;;08-0f 
@@ -1345,10 +1392,10 @@ use this coding system.")
         ,(PCK4BITS      3 eError eError eError eStart eStart eStart eStart) ;;20-27 
         ])
 
-(setq EUCJPCharLenTable
+(defvar EUCJPCharLenTable
       [2  2  2  3  1  0])
 
-(setq EUCJPSMModel `(
+(defvar EUCJPSMModel `(
                      (classTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,EUCJP_cls])
                      (classFactor . 6 )
                      (stateTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,EUCJP_st ] )
@@ -1356,7 +1403,7 @@ use this coding system.")
                      (name . "EUC-JP" )
                      ))
 
-(setq EUCKR_cls 
+(defvar EUCKR_cls 
       `[
         ;;,(PCK4BITS 0 1 1 1 1 1 1 1)   ;; 00 - 07 
         ,(PCK4BITS 1 1 1 1 1 1 1 1)   ;; 00 - 07 
@@ -1394,16 +1441,16 @@ use this coding system.")
         ])
 
 
-(setq EUCKR_st 
+(defvar EUCKR_st 
       `[
         ,(PCK4BITS eError eStart      3 eError eError eError eError eError) ;;00-07 
         ,(PCK4BITS eItsMe eItsMe eItsMe eItsMe eError eError eStart eStart) ;;08-0f 
         ])
 
-(setq EUCKRCharLenTable
+(defvar EUCKRCharLenTable
       [0  1  2  0])
 
-(setq  EUCKRSMModel   `(
+(defvar  EUCKRSMModel   `(
                         (classTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,EUCKR_cls ] )
                         (classFactor . 4 )
                         (stateTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,EUCKR_st ] )
@@ -1411,7 +1458,7 @@ use this coding system.")
                         (name . "EUC-KR" )
                         ))
 
-(setq EUCTW_cls 
+(defvar EUCTW_cls 
       `[
         ;;,(PCK4BITS 0 2 2 2 2 2 2 2)   ;; 00 - 07 
         ,(PCK4BITS 2 2 2 2 2 2 2 2)   ;; 00 - 07 
@@ -1449,7 +1496,7 @@ use this coding system.")
         ])
 
 
-(setq EUCTW_st 
+(defvar EUCTW_st 
       `[
         ,(PCK4BITS eError eError eStart      3      3      3      4 eError) ;;00-07 
         ,(PCK4BITS eError eError eError eError eError eError eItsMe eItsMe) ;;08-0f 
@@ -1459,10 +1506,10 @@ use this coding system.")
         ,(PCK4BITS eStart eError eStart eStart eStart eStart eStart eStart) ;;28-2f 
         ])
 
-(setq EUCTWCharLenTable
+(defvar EUCTWCharLenTable
       [0  0  1  2  2  2  3])
 
-(setq  EUCTWSMModel   `(
+(defvar  EUCTWSMModel   `(
                         (classTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,EUCTW_cls])
                         (classFactor . 7 )
                         (stateTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,EUCTW_st])
@@ -1473,7 +1520,7 @@ use this coding system.")
 
   ;; the following state machine data was created by perl script in 
   ;; intl/chardet/tools. It should be the same as in PSM detector.
-(setq GB18030_cls 
+(defvar GB18030_cls 
       `[
         ,(PCK4BITS 1 1 1 1 1 1 1 1)   ;; 00 - 07 
         ,(PCK4BITS 1 1 1 1 1 1 0 0)   ;; 08 - 0f 
@@ -1510,7 +1557,7 @@ use this coding system.")
         ])
 
 
-(setq GB18030_st 
+(defvar GB18030_st 
       `[
         ,(PCK4BITS eError eStart eStart eStart eStart eStart      3 eError) ;;00-07 
         ,(PCK4BITS eError eError eError eError eError eError eItsMe eItsMe) ;;08-0f 
@@ -1525,10 +1572,10 @@ use this coding system.")
   ;; it is used for frequency analysis only  and we are validing 
   ;; each code range there as well. So it is safe to set it to be 
   ;; 2 here. 
-(setq GB18030CharLenTable
+(defvar GB18030CharLenTable
       [0  1  1  1  1  1  2])
 
-(setq  GB18030SMModel   `(
+(defvar  GB18030SMModel   `(
                           (classTable . [,eIdxSft4bits ,eSftMsk4bits ,eBitSft4bits ,eUnitMsk4bits ,GB18030_cls])
                           (classFactor . 7 )
                           (stateTable . [,eIdxSft4bits ,eSftMsk4bits ,eBitSft4bits ,eUnitMsk4bits ,GB18030_st])
@@ -1538,7 +1585,7 @@ use this coding system.")
 
   ;; sjis
 
-(setq SJIS_cls 
+(defvar SJIS_cls 
       `[
         ;;,(PCK4BITS 0 1 1 1 1 1 1 1)   ;; 00 - 07 
         ,(PCK4BITS 1 1 1 1 1 1 1 1)   ;; 00 - 07 
@@ -1578,17 +1625,17 @@ use this coding system.")
         ])
 
 
-(setq SJIS_st 
+(defvar SJIS_st 
       `[
         ,(PCK4BITS eError eStart eStart      3 eError eError eError eError) ;;00-07 
         ,(PCK4BITS eError eError eError eError eItsMe eItsMe eItsMe eItsMe) ;;08-0f 
         ,(PCK4BITS eItsMe eItsMe eError eError eStart eStart eStart eStart) ;;10-17 
         ])
 
-(setq SJISCharLenTable
+(defvar SJISCharLenTable
       [0  1  1  2  0  0])
 
-(setq SJISSMModel   `(
+(defvar SJISSMModel   `(
                       (classTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,SJIS_cls ] )
                       (classFactor . 6 )
                       (stateTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,SJIS_st ] )
@@ -1597,7 +1644,7 @@ use this coding system.")
                       ))
 
 
-(setq UCS2BE_cls 
+(defvar UCS2BE_cls 
       `[
         ,(PCK4BITS 0 0 0 0 0 0 0 0)   ;; 00 - 07 
         ,(PCK4BITS 0 0 1 0 0 2 0 0)   ;; 08 - 0f 
@@ -1634,7 +1681,7 @@ use this coding system.")
         ])
 
 
-(setq UCS2BE_st 
+(defvar UCS2BE_st 
       `[
         ,(PCK4BITS      5      7      7 eError      4      3 eError eError) ;;00-07 
         ,(PCK4BITS eError eError eError eError eItsMe eItsMe eItsMe eItsMe) ;;08-0f 
@@ -1645,10 +1692,10 @@ use this coding system.")
         ,(PCK4BITS      6      6      6      6 eError eError eStart eStart) ;;30-37 
         ])
 
-(setq UCS2BECharLenTable
+(defvar UCS2BECharLenTable
       [2  2  2  0  2  2])
 
-(setq UCS2BESMModel   `(
+(defvar UCS2BESMModel   `(
                         (classTable . [,eIdxSft4bits ,eSftMsk4bits ,eBitSft4bits ,eUnitMsk4bits ,UCS2BE_cls])
                         (classFactor . 6 )
                         (stateTable . [,eIdxSft4bits ,eSftMsk4bits ,eBitSft4bits ,eUnitMsk4bits ,UCS2BE_st])
@@ -1656,7 +1703,7 @@ use this coding system.")
                         (name . "UTF-16BE" )
                         ))
 
-(setq UCS2LE_cls 
+(defvar UCS2LE_cls 
       `[
         ,(PCK4BITS 0 0 0 0 0 0 0 0)   ;; 00 - 07 
         ,(PCK4BITS 0 0 1 0 0 2 0 0)   ;; 08 - 0f 
@@ -1693,7 +1740,7 @@ use this coding system.")
         ])
 
 
-(setq UCS2LE_st 
+(defvar UCS2LE_st 
       `[
         ,(PCK4BITS      6      6      7      6      4      3 eError eError) ;;00-07 
         ,(PCK4BITS eError eError eError eError eItsMe eItsMe eItsMe eItsMe) ;;08-0f 
@@ -1704,10 +1751,10 @@ use this coding system.")
         ,(PCK4BITS      5      5      5 eError      5 eError eStart eStart) ;;30-37 
         ])
 
-(setq UCS2LECharLenTable
+(defvar UCS2LECharLenTable
       [2  2  2  2  2  2])
 
-(setq UCS2LESMModel   `(
+(defvar UCS2LESMModel   `(
                         (classTable . [,eIdxSft4bits ,eSftMsk4bits ,eBitSft4bits ,eUnitMsk4bits ,UCS2LE_cls])
                         (classFactor . 6 )
                         (stateTable . [,eIdxSft4bits ,eSftMsk4bits ,eBitSft4bits ,eUnitMsk4bits ,UCS2LE_st])
@@ -1715,8 +1762,26 @@ use this coding system.")
                         (name . "UTF-16LE" )
                         ))
 
+;; 0  illegal
+;; 1  single-byte
+;; 2  #b00_00xx
+;; 3  #b00_01xx
+;; 4  #b0x_1xxx
+;; 5  #b1x_xxxx
+;; 6  first byte of 2-byte char  
+;; 7  first byte of 3-byte char #b1110_0000
+;; 8  first byte of 3-byte char  
+;; 9  first byte of 3-byte char #b1110_1101
+;; 10 first byte of 4-byte char #b1111_0000
+;; 11 first byte of 4-byte char  
+;; ------------------------------
+;; 5- or 6-byte char are actually not used
+;; 12 first byte of 5-byte char #b1111_1000
+;; 13 first byte of 5-byte char  
+;; 14 first byte of 6-byte char #b1111_1100
+;; 15 first byte of 6-byte char #b1111_1101
 
-(setq UTF8_cls 
+(defvar UTF8_cls 
         `[
           ;; BitSft  0 1 2 3 4 5 6 7
           ,(PCK4BITS 1 1 1 1 1 1 1 1) ;; 00 - 07  ;;allow #x00 as a legal value
@@ -1753,43 +1818,47 @@ use this coding system.")
           ,(PCK4BITS 12 13 13 13 14 15 0 0)   ;; f8 - ff 
           ])
 
-
-(setq UTF8_st 
-      `[
-        ,(PCK4BITS eError eStart eError eError eError eError      12      10) ;;00-07  0
-        ,(PCK4BITS      9      11      8      7      6      5      4      3) ;;08-0f  1
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;10-17  2
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;18-1f  3
-        ,(PCK4BITS eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe) ;;20-27  4
-        ,(PCK4BITS eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe) ;;28-2f  5
-        ,(PCK4BITS eError eError      5      5      5      5 eError eError) ;;30-37  6
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;38-3f  7
-        ,(PCK4BITS eError eError eError      5      5      5 eError eError) ;;40-47  8
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;48-4f  9
-        ,(PCK4BITS eError eError      7      7      7      7 eError eError) ;;50-57  10
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;58-5f  11
-        ,(PCK4BITS eError eError eError eError      7      7 eError eError) ;;60-67  12
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;68-6f  13
-        ,(PCK4BITS eError eError      9      9      9      9 eError eError) ;;70-77  14
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;78-7f  15
-        ,(PCK4BITS eError eError eError eError eError      9 eError eError) ;;80-87  16
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;88-8f  17
-        ,(PCK4BITS eError eError      12      12      12      12 eError eError) ;;90-97  18
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;98-9f  19
-        ,(PCK4BITS eError eError eError eError eError      12 eError eError) ;;a0-a7  20
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;a8-af  21
-        ,(PCK4BITS eError eError      12      12      12 eError eError eError) ;;b0-b7  22
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;b8-bf  23
-        ,(PCK4BITS eError eError eStart eStart eStart eStart eError eError) ;;c0-c7  24
-        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;c8-cf  25
+;; next_state meaning
+;; 12 waiting for a tail byte.
+;;  9 waiting for the last one before tail. 9->12
+;; 10 waiting for the last one before tail, but it must be   #b1x_xxxx
+;; 11 waiting for the last one before tail, but it cannot be #b1x_xxxx, U+D800-U+DFFF is empty
+(defvar UTF8_st 
+      `[ ;; byteCls   0/8    1/9   2/10   3/11   4/12   5/13   6/14   7/15  ;;    last_state
+        ,(PCK4BITS eError eStart eError eError eError eError     12     10) ;;00-07  0
+        ,(PCK4BITS      9     11      8      7      6      5      4      3) ;;08-0f  0
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;10-17  1
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;18-1f  1
+        ,(PCK4BITS eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe) ;;20-27  2
+        ,(PCK4BITS eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe eItsMe) ;;28-2f  2
+        ,(PCK4BITS eError eError      5      5      5      5 eError eError) ;;30-37  3
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;38-3f  3
+        ,(PCK4BITS eError eError eError      5      5      5 eError eError) ;;40-47  4
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;48-4f  4
+        ,(PCK4BITS eError eError      7      7      7      7 eError eError) ;;50-57  5
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;58-5f  5
+        ,(PCK4BITS eError eError eError eError      7      7 eError eError) ;;60-67  6
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;68-6f  6
+        ,(PCK4BITS eError eError      9      9      9      9 eError eError) ;;70-77  7
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;78-7f  7
+        ,(PCK4BITS eError eError eError eError eError      9 eError eError) ;;80-87  8
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;88-8f  8
+        ,(PCK4BITS eError eError     12     12     12     12 eError eError) ;;90-97  9
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;98-9f  9
+        ,(PCK4BITS eError eError eError eError eError     12 eError eError) ;;a0-a7  10
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;a8-af  10
+        ,(PCK4BITS eError eError     12     12     12 eError eError eError) ;;b0-b7  11
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;b8-bf  11
+        ,(PCK4BITS eError eError eStart eStart eStart eStart eError eError) ;;c0-c7  12
+        ,(PCK4BITS eError eError eError eError eError eError eError eError) ;;c8-cf  12
         ])
 
-(setq UTF8CharLenTable
+(defvar UTF8CharLenTable
       ;0  1  2  3  4  5  6  7
       [0  1  0  0  0  0  2  3  
        3  3  4  4  5  5  6  6 ])
 
-(setq UTF8SMModel   `(
+(defvar UTF8SMModel   `(
                       (classTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,UTF8_cls ] )
                       (classFactor . 16 )
                       (stateTable . [,eIdxSft4bits  ,eSftMsk4bits  ,eBitSft4bits  ,eUnitMsk4bits  ,UTF8_st ] )
@@ -1797,109 +1866,6 @@ use this coding system.")
                       (name . "UTF-8" )
                       ))
 
-
-
-;; just for backup
-
-(setq utf-8-dec '((bit1 #x7F #x80 1)
-                  (bit2 #xDF #xE0 2)
-                  (bit3 #xEF #xF0 3)
-                  (bit4 #xF7 #xF8 4)
-                  (bit5 #xFB #xFC 5)
-                  (bit6 #xFD #xFE 6)
-                  (bit7 #xFE #xFF 7)
-                  (bitx #xBF #xC0 0)))
-
-(defmacro get-utf-8-mask (name)
-  `(car (cdr (assoc ,name utf-8-dec))))
-
-(defmacro get-utf-8-mask2 (name)
-  `(car (cdr (cdr (assoc ,name utf-8-dec)))))
-
-(defmacro get-utf-8-bitnum (name)
-  `(car (cdr (cdr (cdr (assoc ,name utf-8-dec))))))
-
-(defmacro utf-8-mark-p (name ch)
-  `(if (>= (setq masked (- ,(get-utf-8-mask name) ,ch)) 0)
-      (= 0 (logand masked ,(get-utf-8-mask2 name)))))
-
-(defun utf-8-prober (size)
-  "This is not from unicode charset detector"
-  (setq debug-code buffer-file-coding-system-explicit)
-  (unless buffer-file-coding-system-explicit
-    (let (code1
-          code2
-          follow-num
-          (state nil)
-          (confidence 0.0))
-      (setq debug-code 'utf-8-start)
-      (save-excursion
-        (goto-char (point-min))
-        (while (or (> confidence 10)
-                   (and (not (eq state 'not-me))
-                        (< (point) size)))
-          (setq debug-code 'utf-8-doing)
-          (setq code1 (char-after))
-          (forward-char 1)
-          (if debug-now
-              (message "Code1: #x%X" code1))
-          (cond
-           ( ;;(utf-8-mark-p bit1 code1)
-            (<= code1 #x80)          
-            (setq follow-num 0)
-            (setq state 'found-it))
-           ((utf-8-mark-p bit2 code1)
-            (setq follow-num 1))
-           ((utf-8-mark-p bit3 code1)
-            (setq follow-num 2))
-           ((utf-8-mark-p bit4 code1)
-            (setq follow-num 3))
-           ((utf-8-mark-p bit5 code1)
-            (setq follow-num 4))
-           ((utf-8-mark-p bit5 code1)
-            (setq follow-num 4))
-           ((utf-8-mark-p bit6 code1)
-            (setq follow-num 5))
-           ((utf-8-mark-p bit7 code1)
-            (setq follow-num 6))
-           (t
-            (setq follow-num -1)
-            (setq state 'not-me)
-            (setq debug-code (point))
-            (if debug-now
-                (message "Code1 wrong: #x%X" code1))
-            ))
-          (while (> follow-num 0)
-            (setq code2 (char-after))
-            (if debug-now
-                (message "Code2: #x%X" code2))
-            (forward-char 1)
-            (setq state 'found-it)
-            (unless (utf-8-mark-p bitx code2)
-              (setq state 'not-me)
-              (setq follow-num -1)
-              (setq debug-code (point))
-              (if debug-now
-                  (message "Code2 wrong: #x%X" code2))
-              )
-            (setq follow-num (1- follow-num))
-            (setq confidence (1+ confidence))
-            )
-          ))
-      (setq debug-code state)      
-      (if (eq state 'found-it)
-          (progn
-            (setq debug-code 'DONE-utf-8)
-            (message "This IS utf-8")
-            (setq confidence 100.0)
-            )
-        (progn
-          (message "this is not utf-8")
-          (setq debug-code 'NOT-utf-8)
-          (setq confidence 0.0)))
-      (message "confidence of utf-8: %f" confidence)
-      confidence)
-    ))
 
 
 
@@ -1918,14 +1884,14 @@ use this coding system.")
 ;; *****************************************************************************/
 
 ;; #define GB2312_TYPICAL_DISTRIBUTION_RATIO (float)0.9
-(setq GB2312_DIST_RATIO 0.9)
-(setq GB18030_DIST_RATIO GB2312_DIST_RATIO)
+(defvar GB2312_DIST_RATIO 0.9)
+(defvar GB18030_DIST_RATIO 0.9)
 
 ;; #define GB2312_TABLE_SIZE  3760
-(setq GB2312_TABLE_SIZE 3760)
-(setq GB18030_TABLE_SIZE GB2312_TABLE_SIZE)
+(defvar GB2312_TABLE_SIZE 3760)
+(defvar GB18030_TABLE_SIZE 3760)
 
-(setq GB2312CharToFreqOrder
+(defvar GB2312CharToFreqOrder
 [
 1671  749 1443 2364 3924 3807 2330 3921 1704 3463 2691 1511 1515  572 3191 2205 
 2361  224 2558  479 1711  963 3162  440 4060 1905 2966 2947 3580 2647 3961 3842 
@@ -2185,13 +2151,13 @@ use this coding system.")
 ;; * Typical Distribution Ratio about 25% of Ideal one, still much higher than RDR
 ;; *****************************************************************************/
 
-(setq BIG5_DIST_RATIO 0.75)
+(defvar BIG5_DIST_RATIO 0.75)
 
 
 ;;Char to FreqOrder table , 
-(setq BIG5_TABLE_SIZE  5376)
+(defvar BIG5_TABLE_SIZE  5376)
 
-(setq Big5CharToFreqOrder
+(defvar Big5CharToFreqOrder
 [
    1 1801 1506  255 1431  198    9   82    6 5008  177  202 3681 1256 2821  110  ;;   16
 3814   33 3274  261   76   44 2114   16 2946 2187 1176  659 3971   26 3451 2653  ;;   32
@@ -2554,13 +2520,13 @@ use this coding system.")
 ;; * Typical Distribution Ratio, 25% of IDR 
 ;; *****************************************************************************/
 
-(setq JIS_DIST_RATIO 3.0)
+(defvar JIS_DIST_RATIO 3.0)
 
 
 ;;Char to FreqOrder table , 
-(setq JIS_TABLE_SIZE  4368)
+(defvar JIS_TABLE_SIZE  4368)
 
-(setq JISCharToFreqOrder
+(defvar JISCharToFreqOrder
 [
   40    1    6  182  152  180  295 2127  285  381 3295 4304 3068 4606 3165 3510  ;;   16
 3511 1822 2785 4607 1193 2226 5070 4608  171 2996 1247   18  179 5071  856 1661  ;;   32
@@ -2855,12 +2821,12 @@ use this coding system.")
 ;; * Typical Distribution Ratio  
 ;; *****************************************************************************/
 
-(setq EUCKR_DIST_RATIO  6.0)
+(defvar EUCKR_DIST_RATIO  6.0)
 
-(setq EUCKR_TABLE_SIZE  2352)
+(defvar EUCKR_TABLE_SIZE  2352)
 
 ;;Char to FreqOrder table , 
-(setq EUCKRCharToFreqOrder
+(defvar EUCKRCharToFreqOrder
 [
   13  130  120 1396  481 1719 1720  328  609  212 1721  707  400  299 1722   87 
 1397 1723  104  536 1117 1203 1724 1267  685 1268  508 1725 1726 1727 1728 1398 
@@ -3032,12 +2998,12 @@ use this coding system.")
 ;; * Typical Distribution Ratio about 25% of Ideal one, still much higher than RDR
 ;; *****************************************************************************/
 
-(setq EUCTW_DIST_RATIO 0.75)
+(defvar EUCTW_DIST_RATIO 0.75)
 
 ;;Char to FreqOrder table , 
-(setq EUCTW_TABLE_SIZE  8102)
+(defvar EUCTW_TABLE_SIZE  8102)
 
-(setq EUCTWCharToFreqOrder
+(defvar EUCTWCharToFreqOrder
 [
    1 1800 1506  255 1431  198    9   82    6 7310  177  202 3615 1256 2808  110  ;; 2742
 3735   33 3241  261   76   44 2113   16 2931 2184 1176  659 3868   26 3404 2643  ;; 2758
