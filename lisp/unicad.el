@@ -3,8 +3,8 @@
 ;; Copyright 2006 Qichen Huang
 ;;
 ;; Author: jasonal00@gmail.com
-;; Time-stamp: <2006-12-01 12:53:07>
-;; Version: v0.21
+;; Time-stamp: <2006-12-04 23:01:31>
+;; Version: v0.22
 ;; Keywords: 
 ;; X-URL: not distributed yet
 
@@ -56,7 +56,8 @@
 ;; about Mozilla Universal Charset Detector, please refer to:
 ;; http://www.mozilla.org/projects/intl/ChardetInterface.htm
 ;;
-;; Changelog
+;; Changelog:
+;; v0.22 add BOM detector
 ;; v0.21 use vectors instead of class bits as it was in original Mozilla cpp code
 ;;
 ;;; Code:
@@ -124,14 +125,17 @@
 (defvar quick-size 100)
 ;;(setq quick-size 1000)
 
+(defvar debug-coding-system nil)
 
+;; Note files.el line 3527 (run-hook-with-args-until-success 'write-file-functions)
+;; line 3637
 (defun universal-charset-detect (size)
   "detect charset"
-  (make-variable-buffer-local 'buffer-file-coding-system)
-  (setq debug-code buffer-file-coding-system)
-  (when (not (or (eq buffer-file-coding-system 'utf-8-unix)
-                 (eq buffer-file-coding-system 'utf-8-dos)
-                 (eq buffer-file-coding-system 'utf-8-mac)))
+  (setq debug-coding-system buffer-file-coding-system)
+  (when  (not (local-variable-p 'buffer-file-coding-system))
+    ;; (not (or (eq buffer-file-coding-system 'utf-8-unix)
+;;                  (eq buffer-file-coding-system 'utf-8-dos)
+;;                  (eq buffer-file-coding-system 'utf-8-mac)))
     (save-excursion
       (let ((end (+ (point) (min size chardet-max-size)))
             (input-state 'ePureAscii)
@@ -144,84 +148,136 @@
         ;;         (if (chardet-BOM-p)
         ;;             ;; if the data starts with BOM, we know it is UTF
         ;;             (return-utf))
-        (goto-char (point-min))
-        (setq debug-code 'mStart)
-        (while (and (not (eq state 'mDone))
-                    (eq input-state 'ePureAscii)
-                    (< (point) end))
-          (setq code1 (char-after))
-          (forward-char 1)
-          (setq debug-code 'mDoing) ;; for debug purpose
-          (if debug-uni
-              (message "#x%X: %s: point: %d" code1 (string code1) (point)))
-          (if (and (>= code1 #x80)
-                   (/= code1 #xA0)) ;; since many Ascii only page contains NBSP
-              ;; we got a non-ascii byte (high-byte)
-              (unless (eq input-state 'eHighbyte)
-                (setq input-state 'eHighbyte)
-                (setq start (max (point-min) (1- (point))))
-;;                 (message "Non-ascii point: %d, current: %d" start (point))
-                ;;                 (kill-esc-charset-prob)
-                ;;                 (multibyte-utf-8-prober end)
-                ;;                 (start-multi-byte-group-prober)
-                ;;                 (start-single-byte-group-prober)
-                ;;                 (start-latin1-prober)
-                )
-            (progn
-              ;; OK, just pure ascii so far
-              (if (and (eq input-state 'ePureAscii)
-                       (or (= code1 #x1B) ;; ESC char
-                           (and (= code1 ?{ ) (= code0 ?~ )))) ;; HZ "~{"
-                  ;; found escape character or HZ "~{"
-                  (setq input-state 'eEscAscii))
-              (setq code0 code1))
-            ))
-        (setq debug-code input-state)
-        (cond
-         ((eq input-state 'eEscAscii)
-          ;;           (start-esc-charset-prober)
-          )
-         ((eq input-state 'eHighbyte)
-          ;;          (do-charset-prober)
-          (if (> (- end start) quick-size)
+        (unless (setq prober-result (unicad-bom-detect))
+          (goto-char (point-min))
+          (setq debug-code 'mStart)
+          (while (and (not (eq state 'mDone))
+                      (eq input-state 'ePureAscii)
+                      (< (point) end))
+            (setq code1 (char-after))
+            (forward-char 1)
+            (setq debug-code 'mDoing) ;; for debug purpose
+            (if debug-uni
+                (message "#x%X: %s: point: %d" code1 (string code1) (point)))
+            (if (and (>= code1 #x80)
+                     (/= code1 #xA0)) ;; since many Ascii only page contains NBSP
+                ;; we got a non-ascii byte (high-byte)
+                (unless (eq input-state 'eHighbyte)
+                  (setq input-state 'eHighbyte)
+                  (setq start (max (point-min) (1- (point))))
+                  ;;                 (message "Non-ascii point: %d, current: %d" start (point))
+                  ;;                 (kill-esc-charset-prob)
+                  ;;                 (multibyte-utf-8-prober end)
+                  ;;                 (start-multi-byte-group-prober)
+                  ;;                 (start-single-byte-group-prober)
+                  ;;                 (start-latin1-prober)
+                  )
+              (progn
+                ;; OK, just pure ascii so far
+                (if (and (eq input-state 'ePureAscii)
+                         (or (= code1 #x1B) ;; ESC char
+                             (and (= code1 ?{ ) (= code0 ?~ )))) ;; HZ "~{"
+                    ;; found escape character or HZ "~{"
+                    (setq input-state 'eEscAscii))
+                (setq code0 code1))
+              ))
+          (setq debug-code input-state)
+          (cond
+           ((eq input-state 'eEscAscii)
+            ;;           (start-esc-charset-prober)
+            )
+           ((eq input-state 'eHighbyte)
+            ;;          (do-charset-prober)
+            (if (> (- end start) quick-size)
+                (setq quick-start start
+                      quick-end (+ quick-size start))
               (setq quick-start start
-                    quick-end (+ quick-size start))
-            (setq quick-start start
-                  quick-end end))
-          (let ((maxConfidence 0.0))
-            (cond
-             ((eq (multibyte-group-prober quick-start quick-end) 'eFoundIt)
-              (setq prober-result (car multibyte-bestguess))
-              (setq maxConfidence 0.99))
-             ((and (/= quick-end end)
-                   (eq (multibyte-group-prober start end) 'eFoundIt))
-              (setq prober-result (car multibyte-bestguess))
-              (setq maxConfidence 0.99))
-             (t
-              (setq maxConfidence (latin1-prober start end))
-              (setq debug-code maxConfidence)
-              (if (> maxConfidence (car (cdr multibyte-bestguess)))
-                  (setq prober-result 'latin-1)
-                (setq prober-result (car multibyte-bestguess)
-                      maxConfidence (car (cdr multibyte-bestguess))))))
-            (setq debug-code (list prober-result maxConfidence)))
-;;             (if (> (utf-8-prober end) (latin1-prober start end))
-;;                 (setq prober-result 'utf-8)
-;;               (setq prober-result 'latin-1))
-;;             (setq debug-code start))          
-;;           (setq prober-result (multibyte-utf-8-prober end))
-;;           (setq debug-code prober-result)
-          )
-         ((eq input-state 'ePureAscii)
-          (setq prober-result 'utf-8)
-          (setq debug-code 'pure-ascii))
-         (t
-          nil))
+                    quick-end end))
+            (let ((maxConfidence 0.0))
+              (cond
+               ((eq (multibyte-group-prober quick-start quick-end) 'eFoundIt)
+                (setq prober-result (car multibyte-bestguess))
+                (setq maxConfidence 0.99))
+               ((and (/= quick-end end)
+                     (eq (multibyte-group-prober start end) 'eFoundIt))
+                (setq prober-result (car multibyte-bestguess))
+                (setq maxConfidence 0.99))
+               (t
+                (setq maxConfidence (latin1-prober start end))
+                (setq debug-code maxConfidence)
+                (if (> maxConfidence (car (cdr multibyte-bestguess)))
+                    (setq prober-result 'latin-1)
+                  (setq prober-result (car multibyte-bestguess)
+                        maxConfidence (car (cdr multibyte-bestguess))))))
+              (setq debug-code (list prober-result maxConfidence)))
+            ;;             (if (> (utf-8-prober end) (latin1-prober start end))
+            ;;                 (setq prober-result 'utf-8)
+            ;;               (setq prober-result 'latin-1))
+            ;;             (setq debug-code start))          
+            ;;           (setq prober-result (multibyte-utf-8-prober end))
+            ;;           (setq debug-code prober-result)
+            )
+           ((eq input-state 'ePureAscii)
+            (setq prober-result 'utf-8)
+            (setq debug-code 'pure-ascii))
+           (t
+            nil)))
         prober-result
         ))))
 
 (add-to-list 'auto-coding-functions 'universal-charset-detect)
 
+
+;; BOM detector
+(defun unicad-bom-detect ()
+  (save-excursion
+    (goto-char (point-min))
+    (setq debug-code 'bom-detecting)
+    (when (> (point-max) 3)
+      (let (code0 code1 code2 code3)
+        (setq code0 (char-after))
+        (forward-char)
+        (setq code1 (char-after))
+        (forward-char)
+        (setq code2 (char-after))
+        (forward-char)
+        (setq code3 (char-after))
+        (forward-char)
+        (cond
+         ((and (= code0 #xEF)
+               (= code1 #xBB)
+               (= code2 #xBF))
+          'utf-8)
+         ((and (= code0 #xFE)
+               (= code1 #xFF)
+               (= code2 #x00)
+               (= code3 #x00))
+          ;; unusual octet order BOM (3412)
+          nil)
+         ((and (= code0 #xFE)
+               (= code1 #xFF))
+          'utf-16be)
+         ((and (= code0 0)
+               (= code1 0)
+               (= code2 #xFE)
+               (= code3 #xFF))
+          ;;utf-32be is not supported by emacs23
+          nil)
+         ((and (= code0 0)
+               (= code1 0)
+               (= code2 #xFF)
+               (= code3 #xFE))
+          ;; ucs-4 unusual octet order BOM (2143)
+          nil)
+         ((and (= code0 #xFF)
+               (= code1 #xFE)
+               (= code2 #x00)
+               (= code3 #x00))
+          ;; utf-32 little-endian not supported by emacs23
+          nil)
+         ((and (= code0 #xFF)
+               (= code1 #xFE))
+          'utf-16le))))))
 
 
 
@@ -254,7 +310,7 @@
 ;;(car (cdr (cdr multibyte-utf8-list)))
 
 (defun multibyte-utf8-prober (start end)
-  (setq debug-code 'start-multibyte-utf8)
+  (setq debug-code (list 'starting-utf8 (char-after) (point)))
   (let ((mState 'eDetecting)
         (mNumOfMBChar 0)
         codingState
@@ -268,6 +324,7 @@
       (while (and (< (point) end)
                   (eq mState 'eDetecting))
         (setq codingState (nextstate (char-after) utf8smmodel))
+        (setq debug-code (list 'doing-utf8 (char-after) (point)))
         (setq charlen (SM-get-charlen))
         (forward-char 1)
         (cond
@@ -339,7 +396,7 @@
         (setq code1 (char-after))
         (setq codingState (nextstate code1 gb18030smmodel))
         (forward-char 1)
-        (setq debug-code (list 'gb-doing codingState mState))
+        (setq debug-code (list 'gb-doing codingState mState code0 code1 (point)))
         (cond
          ((= codingState eError)
           (setq mState 'eNotMe)
@@ -441,7 +498,7 @@
         (setq code1 (char-after))
         (setq codingState (nextstate code1 big5smmodel))
         (forward-char 1)
-        (setq debug-code (list 'gb-doing codingState mState))
+        (setq debug-code (list 'big5-doing codingState mState))
         (cond
          ((= codingState eError)
           (setq mState 'eNotMe)
@@ -544,7 +601,7 @@
         (setq code1 (char-after))
         (setq codingState (nextstate code1 sjissmmodel))
         (forward-char 1)
-        (setq debug-code (list 'gb-doing codingState mState))
+        (setq debug-code (list 'sjis-doing codingState mState))
         (cond
          ((= codingState eError)
           (setq mState 'eNotMe)
@@ -651,7 +708,7 @@
         (setq code1 (char-after))
         (setq codingState (nextstate code1 eucjpsmmodel))
         (forward-char 1)
-        (setq debug-code (list 'gb-doing codingState mState))
+        (setq debug-code (list 'eucjp-doing codingState mState))
         (cond
          ((= codingState eError)
           (setq mState 'eNotMe)
@@ -747,7 +804,7 @@
         (setq code1 (char-after))
         (setq codingState (nextstate code1 euckrsmmodel))
         (forward-char 1)
-        (setq debug-code (list 'gb-doing codingState mState))
+        (setq debug-code (list 'euckr-doing codingState mState))
         (cond
          ((= codingState eError)
           (setq mState 'eNotMe)
@@ -842,7 +899,7 @@
         (setq code1 (char-after))
         (setq codingState (nextstate code1 euctwsmmodel))
         (forward-char 1)
-        (setq debug-code (list 'gb-doing codingState mState))
+        (setq debug-code (list 'euctw-doing codingState mState))
         (cond
          ((= codingState eError)
           (setq mState 'eNotMe)
@@ -1607,7 +1664,7 @@ It is a good but really complicated table. I don't know how it was generated.
                       (name . "Shift_JIS" )
                       ))
 
-;; USC2 big-endien
+;; USC2 big-endian
 
 (defvar ucs2be_cls 
       `[
@@ -2788,6 +2845,7 @@ It is a good but really complicated table. I don't know how it was generated.
 ;; *****************************************************************************/
 
 (defvar EUCKR_DIST_RATIO  6.0)
+;;(setq EUCKR_DIST_RATIO 2.0)
 
 (defvar EUCKR_TABLE_SIZE  2352)
 
