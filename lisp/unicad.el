@@ -1,12 +1,12 @@
 ;;; unicad.el --- an elisp port of Mozilla Universal Charset Auto Detector
 
 ;; Copyright (C) 2006, 2007 Qichen Huang
-;;
+;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-05-23 00:13:49>
+;; Time-stamp: <2007-05-24 04:03:44>
 ;; Version: v0.65
 ;; Keywords: coding-system, auto-coding-functions
-;; X-URL: http://jasonal.blogspot.com/2007/02/unicadel.html
+;; X-URL: http://code.google.com/p/unicad/
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -82,9 +82,9 @@
 ;; Changelog
 ;; v0.65 fixed a bug in `unicad-gbkcht-analyser'
 ;; v0.64 add support for traditional chinese encoded in gbk
-;; v0.63 changed the threhold in unicad-dist-table-get-confidence
+;; v0.63 changed the threhold in `unicad-dist-table-get-confidence'
 ;; v0.62 allow esc(0x1B) as legal value in utf-8, gb18030, sjis, big5, euckr
-;; v0.61 add a unicad-quick-multibyte-words, increase unicad-quick-size to 500
+;; v0.61 add a `unicad-quick-multibyte-words', increase `unicad-quick-size' to 500
 ;;       add support for sjis single byte only katakana files
 ;; v0.60 delete singlebyte-model, replace it with more reasonable variables
 ;; v0.52 change singlebyte-dist-table to vectors, and some other changes
