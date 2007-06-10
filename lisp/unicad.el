@@ -1,10 +1,11 @@
 ;;; unicad.el --- an elisp port of Mozilla Universal Charset Auto Detector
 
+;;;{{{  Copyright and License
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-05-24 04:03:44>
-;; Version: v0.65
+;; Time-stamp: <2007-06-10 10:31:06>
+;; Version: v1.0.0
 ;; Keywords: coding-system, auto-coding-functions
 ;; X-URL: http://code.google.com/p/unicad/
 
@@ -21,8 +22,9 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program; if not, write to the Free Software
 ;; Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+;;;}}}
 
-;;; Commentary:
+;;;{{{ Commentary:
 
 ;; 
 
@@ -78,8 +80,10 @@
 ;; comfortable and quickly in Emacs. For more information about
 ;; Mozilla Universal Charset Detector, please refer to:
 ;; http://www.mozilla.org/projects/intl/ChardetInterface.htm
-;;
-;; Changelog
+;;;}}}
+
+;;;{{{ Changelog
+;; v1.0.0 minor changes, just some tidy works
 ;; v0.65 fixed a bug in `unicad-gbkcht-analyser'
 ;; v0.64 add support for traditional chinese encoded in gbk
 ;; v0.63 changed the threhold in `unicad-dist-table-get-confidence'
@@ -93,9 +97,11 @@
 ;; v0.30 change variable and function names to ucad-* prefix
 ;; v0.22 add BOM detector
 ;; v0.21 use vectors instead of class bits as it was in original Mozilla cpp code
-;;
+;;}}}
+
 ;;; Code:
 
+;;{{{  define variable
 
 ;;(provide 'unicad)
 (eval-when-compile
@@ -117,10 +123,9 @@
 
 (defconst unicad--sure-yes 0.99)
 (defconst unicad--sure-no 0.01)
+;;}}}
 
-
-
-;;{{{ Auto Coding Function
+;;{{{  Auto Coding Function
 ;; ePureAscii, eEscAscii -> unicad-default-coding-system
 ;; eHighbyte -> multibyte-group-prober -> latin1->prober
 (defun unicad-universal-charset-detect (size)
@@ -153,7 +158,9 @@
               (setq code0 code1)))
           (cond
            ((eq input-state 'eEscAscii)
-;;             (unicad-esc-group-prober (point-min) end)
+            ;; actually emacs itself can tell the esc charset very well
+            ;; so we don't need to do ourselves
+            ;; (unicad-esc-group-prober (point-min) end)
             )
            ((eq input-state 'eHighbyte)
             (if (> (- end start) unicad-quick-size)
@@ -198,11 +205,10 @@
     (unless coding-system
       (setq coding-system (unicad-universal-charset-detect size)))
     coding-system))
-;;(add-to-list 'auto-coding-functions 'unicad-universal-charset-detect)
+
 ;;}}}
 
-
-;;{{{ BOM detector
+;;{{{  BOM detector
 (defun unicad-bom-detect ()
   "BOM detector. For detecting the signature of utf-8, utf-16le,
 utf-16be ..."
@@ -232,7 +238,7 @@ utf-16be ..."
           nil)
          ((and (= code0 #xFE)
                (= code1 #xFF))
-          'utf-16be)
+          'utf-16be-with-signature)
          ((and (= code0 0)
                (= code1 0)
                (= code2 #xFE)
@@ -253,11 +259,11 @@ utf-16be ..."
           nil)
          ((and (= code0 #xFF)
                (= code1 #xFE))
-          'utf-16le))))))
+          'utf-16le-with-signature))))))
 ;;}}}
 
-
-;; some chardet functions
+;;{{{  some chardet functions
+
 (defsubst unicad-chardet-prober (chardet)
   "fetch the multibyte chardet prober function"
   (aref chardet 2))
@@ -284,9 +290,9 @@ utf-16be ..."
           (setq lists nil)
         (setq chardet nil)))
     chardet))
+;;}}}
 
-
-;;{{{ SingleByte Prober
+;;{{{  SingleByte Prober
 
 (defconst unicad-sample-size 64)
 (defconst unicad-sb-enough-rel-threshold 1024)
@@ -326,11 +332,9 @@ utf-16be ..."
   "extract the singlebyte chardet prober functions from
 `unicad-singlebyte-group-list', compare the confidence of each
 chardet and return the best guess."
-;;   (backward-word)
   (let ((lists unicad-singlebyte-group-list)
         (mState 'eDetecting)
         (bestConf 0.0)
-;;         (start (point))
         state prober mBestGuess cf)
     (setq unicad-singlebyte-best-guess '(nil 0.0)
           unicad-singlebyte-group-guess nil)
@@ -384,20 +388,12 @@ chardet and return the best guess."
         (forward-char)
         (when (and (>= code #x80) (not meetMSB))
           (setq meetMSB t)
-          ;;         (forward-word)
-          ;;         (backward-word)
-          ;;         (unless (looking-at "\\<")
-          ;;           (backward-word))
           (goto-char word-mark)
           (setq code (char-after))
           (forward-char)
-          ;;         (setq words (1+ words))
           )
-        ;;       (if (and meetMSB (< code #x80) (looking-at "\\W"))
-        ;;           (setq meetMSB nil
-        ;;                 words (1+ words)))
         (if (and 
-             (< code #x80) ;;(looking-at "\\W")
+             (< code #x80)
              (not (or (and (> code ?a) (< code ?z))
                       (and (> code ?A) (< code ?Z)))))
             (setq meetMSB nil
@@ -557,12 +553,10 @@ chardet and return the best guess."
 
 ;;}}}
 
-
-;;{{{ Multibyte Prober
+;;{{{  Multibyte Prober
+
 (defvar unicad-best-guess nil
   "(MACHINE-BEST-GUESS BEST-CONFIDENCE)")
-
-;; (defvar unicad-chosen-gb-coding-system 'gb2312)
 
 (defvar unicad-chosen-gb-coding-system 
   (cond 
@@ -667,7 +661,6 @@ japanese, korean"
       mState)))
 ;;}}}
 
-
 ;;{{{  utf8 prober
 (defvar unicad-utf8-list (unicad-chardet unicad-multibyte-group-list 'unicad-utf8-prober))
 
@@ -713,8 +706,9 @@ machine (`unicad-next-state') and get the confidence"
         (setq unlike (* (expt one-char-prob mNumOfMBChar) unlike))
       (setq unlike unicad--sure-no))
     (- 1 unlike)))
+
 ;;}}}
-
+;;{{{  ucs2be and ucs2le prober
 
 (defvar unicad-ucs2be-list (unicad-chardet unicad-multibyte-group-list 'unicad-ucs2be-prober))
 
@@ -748,7 +742,6 @@ newline, space, numbers and english letters."
               (setq mState 'eFoundIt)))))
     mState))
 
-
 (defvar unicad-ucs2le-list (unicad-chardet unicad-multibyte-group-list 'unicad-ucs2le-prober))
 
 (defun unicad-ucs2le-prober (start end)
@@ -781,49 +774,8 @@ newline, space, numbers and english letters."
               (setq mState 'eFoundIt)))))
     mState))
 
-;; (defun unicad-ucs2le-prober (start end)
-;;   (let ((mState 'eDetecting)
-;;         (mNumOfMBChar 0)
-;;         codingState charlen (mConfidence 0.0))
-;;     (setq start (point-min)
-;;           end (point-max))
-;;     (unicad-sm-reset)
-;;     (save-excursion
-;;       (goto-char start)
-;;       (while (and (< (point) end)
-;;                   (eq mState 'eDetecting))
-;;         (setq codingState (unicad-next-state (char-after)
-;;                                            unicad-ucs2le-sm-model))
-;;         (setq charlen (unicad-sm-get 'mCharLen))
-;;         (forward-char 1)
-;;         (cond
-;;          ((= codingState unicad--eStart)
-;;           (if (>= charlen 2)
-;;               (setq mNumOfMBChar (1+ mNumOfMBChar))))
-;;          ((= codingState unicad--eError)
-;;           (setq mState 'eNotMe)
-;;           (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-no))
-;;          ((= codingState unicad--eItsMe)
-;;           (setq mState 'eFoundIt)
-;;           (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-yes))
-;;          (t nil)))
-;;       (if (eq mState 'eDetecting)
-;;           (if (> (setq mConfidence (unicad-ucs2le-get-confidence mNumOfMBChar)) unicad-threshold)
-;;               (progn
-;;                 (setq mState 'eFoundIt)
-;;                 (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-yes))
-;;             (unicad-chardet-set-confidence unicad-ucs2le-list mConfidence)))
-;;       mState)))
-
-;; (defun unicad-ucs2le-get-confidence (mNumOfMBChar)
-;;   (let ((unlike unicad--sure-yes)
-;;         (one-char-prob 0.5))
-;;     (if (< mNumOfMBChar 6)
-;;         (setq unlike (* (expt one-char-prob mNumOfMBChar) unlike))
-;;       (setq unlike unicad--sure-no))
-;;     (- 1 unlike)))
-
-;;;{{{ ucs2 state machine
+;;}}}
+;;{{{  ucs2 state machine
 ;; the state machine for ucs2 seems doesn't work.
 ;; so I use the simple prober above to detect ucs2
 
@@ -952,8 +904,6 @@ newline, space, numbers and english letters."
    (cons 'name "UTF-16-LE")))
 
 ;;}}}
-
-;; Probers for east asian languages
 
 ;;{{{  gb2312 prober
 (defvar unicad-gb2312-list (unicad-chardet unicad-multibyte-group-list 'unicad-gb2312-prober))
@@ -979,9 +929,9 @@ no validation needed here.  State machine has done that"
             (unicad-dist-table-freq-chars++ unicad-gb2312-dist-table))))))
 
 ;;}}}
-
-;;;{{{ gbkcht prober
+;;{{{  gbkcht prober
 ;; use gbk state machine but use big5 analyser
+
 (defvar unicad-gbkcht-list (unicad-chardet unicad-multibyte-group-list 'unicad-gbkcht-prober))
 (defvar unicad-big5-dist-table '(0 . 0))
 (defsubst unicad-gbkcht-prober (start end)
@@ -999,8 +949,8 @@ no validation needed here.  State machine has done that"
           (unicad-big5-analyser chr0 chr1)))))
 
 ;;;}}}
-
 ;;{{{  big5 prober
+
 (defvar unicad-big5-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5-prober))
 (defvar unicad-big5-dist-table '(0 . 0))
 (defsubst unicad-big5-prober (start end)
@@ -1023,9 +973,10 @@ no validation needed here. State machine has done that"
         (if (and (< order unicad-big5-table-size)
                  (<= (aref unicad-big5-char-freq-order order) 512))
             (unicad-dist-table-freq-chars++ unicad-big5-dist-table))))))
-;;}}}
 
+;;}}}
 ;;{{{  sjis prober
+
 (defvar unicad-sjis-list (unicad-chardet unicad-multibyte-group-list 'unicad-sjis-prober))
 (defvar unicad-sjis-dist-table '(0 . 0))
 (defsubst unicad-sjis-prober (start end)
@@ -1054,9 +1005,10 @@ no validation needed here. State machine has done that
       (if (and (< order unicad-jis-table-size)
                (<= (aref unicad-jis-char-freq-order order) 512))
           (unicad-dist-table-freq-chars++ unicad-sjis-dist-table)))))
-;;}}}
 
+;;}}}
 ;;{{{  eucjp prober
+
 (defvar unicad-eucjp-list (unicad-chardet unicad-multibyte-group-list 'unicad-eucjp-prober))
 (defvar unicad-eucjp-dist-table '(0 . 0))
 (defsubst unicad-eucjp-prober (start end)
@@ -1077,9 +1029,10 @@ no validation needed here. State machine has done that"
         (if (and (< order unicad-jis-table-size)
                  (<= (aref unicad-jis-char-freq-order order) 512))
             (unicad-dist-table-freq-chars++ unicad-eucjp-dist-table))))))
-;;}}}
 
+;;}}}
 ;;{{{  euckr prober
+
 (defvar unicad-euckr-list (unicad-chardet unicad-multibyte-group-list 'unicad-euckr-prober))
 (defvar unicad-euckr-dist-table '(0 . 0))
 (defsubst unicad-euckr-prober (start end)
@@ -1100,9 +1053,10 @@ no validation needed here. State machine has done that"
         (if (and (< order unicad-euckr-table-size)
                  (<= (aref unicad-euckr-char-freq-order order) 512))
             (unicad-dist-table-freq-chars++ unicad-euckr-dist-table))))))
-;;}}}
 
+;;}}}
 ;;{{{  euctw prober
+
 (defvar unicad-euctw-list (unicad-chardet unicad-multibyte-group-list 'unicad-euctw-prober))
 (defvar unicad-euctw-dist-table '(0 . 0))
 (defsubst unicad-euctw-prober (start end)
@@ -1125,11 +1079,7 @@ no validation needed here. State machine has done that"
             (unicad-dist-table-freq-chars++ unicad-euctw-dist-table))))))
 ;;}}}
 
-
 ;;{{{  latin1 prober
-
-;; (defvar unicad-latin1-list
-;;   `[latin-1 0 unicad-latin-prober])
 
 (defvar unicad-latin-best-guess '(windows-1252 0.0))
 
@@ -1171,7 +1121,6 @@ no validation needed here. State machine has done that"
         (setq code1 (char-after))
         (forward-char 1)
         (setq code1-class (aref class-table code1))
-;;         (setq debug-code (list code0 code1)) ;; debug
         (setq freq (aref latin-model
                          (+ (* code0-class class-num)
                             code1-class)))
@@ -1179,8 +1128,6 @@ no validation needed here. State machine has done that"
             (setq mState 'eNotMe)
           (aset mFreqCounter freq (1+ (aref mFreqCounter freq)))
           )
-;;         (if (not (= freq 3))
-;;             (setq debug-code (list code0 code1)))
         (setq code0-class code1-class
                 code0 code1)))
     (unicad-latin-get-confidence mState mFreqCounter)))
@@ -1199,8 +1146,7 @@ no validation needed here. State machine has done that"
 
 ;;}}}
 
-
-;;{{{ State Machine functions
+;;{{{  State Machine functions
 (defvar unicad-sm-coding-state nil
   "Init state:
    ((mState . eStart)
@@ -1211,13 +1157,10 @@ no validation needed here. State machine has done that"
 (defconst unicad--eError 1)
 (defconst unicad--eItsMe 2)
 
-;; (defvar unicad--state-list nil "Debug only")
-
 (defsubst unicad-sm-reset ()
   (setq unicad-sm-coding-state `((mState . ,unicad--eStart)
                                (mCharLen . 0)
                                (mBytePos . 0))))
-;;        unicad--state-list nil))
 
 (defsubst unicad-sm-set (name value)
   (setcdr (assoc name unicad-sm-coding-state) value))
@@ -1244,11 +1187,11 @@ no validation needed here. State machine has done that"
           unicad-sm-coding-state `((mState . ,next-state)
                                  (mCharLen . ,next-charlen)
                                  (mBytePos . ,next-bytepos)))
-    ;; unicad--state-list (cons (vector next-state next-charlen next-bytepos) unicad--state-list))
     next-state))
-;;}}}
 
+;;}}}
 ;;{{{  utf8 state machine
+
 (defvar unicad-utf8-class-table
   `[
     1 1 1 1 1 1 1 1         ;; 00 - 07 0 
@@ -1331,9 +1274,10 @@ no validation needed here. State machine has done that"
    (cons 'stateTable unicad-utf8-state-table)
    (cons 'charLenTable unicad-utf8-charlen-table)
    (cons 'name 'utf-8)))
-;;}}}
 
+;;}}}
 ;;{{{  gb18030 state machine
+
 (defvar unicad-gb18030-class-table
   [
    1 1 1 1 1 1 1 1        ;; 00 - 07
@@ -1400,7 +1344,6 @@ no validation needed here. State machine has done that"
    (cons 'name 'gb18030)))
 
 ;;}}}
-
 ;;{{{  big5 state machine
 (defvar unicad-big5-class-table
       `[
@@ -1460,7 +1403,6 @@ no validation needed here. State machine has done that"
    (cons 'charLenTable  unicad-big5-charlen-table)
    (cons 'name  'big5)))
 ;;}}}
-
 ;;{{{  sjis state machine
 (defvar unicad-sjis-class-table
   `[
@@ -1522,9 +1464,10 @@ no validation needed here. State machine has done that"
    (cons 'stateTable  unicad-sjis-state-table)
    (cons 'charLenTable  unicad-sjis-charlen-table)
    (cons 'name 'sjis)))
-;;}}}
 
+;;}}}
 ;;{{{  eucjp state machine
+
 (defvar unicad-eucjp-class-table
       `[
         ;;,(PCK4BITS 5 4 4 4 4 4 4 4)   ;; 00 - 07
@@ -1585,8 +1528,8 @@ no validation needed here. State machine has done that"
    (cons 'stateTable  unicad-eucjp-state-table)
    (cons 'charLenTable  unicad-eucjp-charlen-table)
    (cons 'name 'euc-jp)))
-;;}}}
 
+;;}}}
 ;;{{{  euckr state machine
 (defvar unicad-euckr-class-table
   `[
@@ -1646,8 +1589,8 @@ no validation needed here. State machine has done that"
    (cons 'stateTable  unicad-euckr-state-table)
    (cons 'charLenTable  unicad-euckr-charlen-table)
    (cons 'name 'euc-kr)))
-;;}}}
 
+;;}}}
 ;;{{{  euctw state machine
 (defvar unicad-euctw-class-table
   `[
@@ -1709,8 +1652,8 @@ no validation needed here. State machine has done that"
    (cons 'stateTable  unicad-euctw-state-table)
    (cons 'charLenTable  unicad-euctw-charlen-table)
    (cons 'name  'euc-tw)))
-;;}}}
 
+;;}}}
 ;;{{{  latin1 state machine
 (defvar unicad-latin1-class-num  9)   ;; total classes
 (defvar unicad-latin1-class-table
@@ -1774,10 +1717,7 @@ no validation needed here. State machine has done that"
    ])
 ;;}}}
 
-
-;;{{{
-
-;; Esc CharSet Prober
+;;{{{  Esc CharSet Prober
 
 (defvar unicad-esc-group-list
   (list
@@ -1853,9 +1793,7 @@ no validation needed here. State machine has done that"
 
 ;;}}}
 
-
-
-;;;{{{ Latin2
+;;{{{  Latin2
 
 (defvar unicad-latin2-class-num 9)   ;; total classes
 
@@ -1921,10 +1859,7 @@ no validation needed here. State machine has done that"
 
 ;;;}}}
 
-
-;; distribution table
-
-;;{{{ Dist Table functions
+;;{{{  Dist Table functions
 (defsubst unicad-dist-table-reset (dist-table)
   (setcar dist-table 0)
   (setcdr dist-table 0))
@@ -1941,7 +1876,6 @@ no validation needed here. State machine has done that"
   (let ((Confidence 0.0)
         (total-chars (unicad-dist-table-total-chars dist-table))
         (freq-chars (unicad-dist-table-freq-chars dist-table)))
-    ;;(message "tot: %d, freq: %d, size %d" total-chars freq-chars size)
     (cond
      ((and (> size unicad-minimum-size-threshold)
            (or (<= total-chars (- (/ unicad-minimum-size-threshold 2) 4))    ;; this was `0'
@@ -1953,9 +1887,6 @@ no validation needed here. State machine has done that"
      (t (setq Confidence unicad--sure-yes)))))
 
 ;;}}}
-
-
-;; freq order table
 
 ;;{{{  gb2312 freq order table
 (defvar unicad-gb2312-table-size 3760)
@@ -2199,7 +2130,6 @@ no validation needed here. State machine has done that"
    852 1221 1400 1486  882 2299 4036  351   28 1122  700 6479 6480 6481 6482 6483
    ])
 ;;}}}
-
 ;;{{{  big5 freq order
 (defvar unicad-big5-table-size 5376)
 (defvar unicad-big5-dist-ratio 0.75)
@@ -2544,7 +2474,6 @@ no validation needed here. State machine has done that"
 ])
 
 ;;}}}
-
 ;;{{{  jis freq table
 ;; JIS Freq table
 
@@ -2845,7 +2774,6 @@ no validation needed here. State machine has done that"
 2922 3625  544  461 6189  566  209 2437 3398 2098 1065 2068 3331 3626 3257 2137
 ])
 ;;}}}
-
 ;;{{{  euckr freq table
 ;; euc-kr freq table
 
@@ -3017,7 +2945,6 @@ no validation needed here. State machine has done that"
  670 1190 2635 2636 2637 2638  168 2639  652  873  542 1054 1541 2640 2641 2642
 ])
 ;;}}}
-
 ;;{{{  euctw freq table
 ;; EUCTW frequency table
 ;; Converted from big5 work
@@ -3381,10 +3308,7 @@ no validation needed here. State machine has done that"
 ])
 ;;}}}
 
-
-;; Single Byte Character Mapping Table
-
-;;{{{ Greek Model
+;;{{{  Greek Model
 ;; ****************************************************************
 ;; 255: Control characters that usually does not exist in any text
 ;; 254: Carriage/Return
@@ -3574,28 +3498,8 @@ no validation needed here. State machine has done that"
    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
    ])
 
-;; (defvar unicad-latin7-model
-;;   (list
-;;    (cons 'char2order-map unicad-latin7-char2order-map)
-;;    (cons 'precedence-matrix unicad-greek-lang-model)
-;;    (cons 'typ-positive-ratio 0.982851)
-;;    (cons 'keep-english-letter nil) 
-;;    (cons 'charset-name 'iso-8859-7)
-;;    ))
-
-;; (defvar unicad-win1253-model
-;;   (list
-;;    (cons 'char2order-map unicad-win1253-char2order-map) 
-;;    (cons 'precedence-matrix unicad-greek-lang-model) 
-;;    (cons 'typ-positive-ratio 0.982851)
-;;    (cons 'keep-english-letter nil) 
-;;    (cons 'charset-name 'windows-1253)
-;;    ))
-
 ;;}}}
-
-
-;;{{{ Russian Model
+;;{{{  Russian Model
 
 ;;KOI8-R language model
 ;;Character Mapping Table:
@@ -3857,66 +3761,8 @@ no validation needed here. State machine has done that"
     0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 
     ])
 
-
-;; (defvar unicad-koi8r-model
-;;   (list
-;;    (cons 'char2order-map unicad-koi8r-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'koi8-r)
-;;    ))
-   
-;; (defvar unicad-win1251-model
-;;   (list
-;;    (cons 'char2order-map unicad-win1251-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'windows-1251)
-;;    ))
-   
-;; (defvar unicad-latin5-model
-;;   (list
-;;    (cons 'char2order-map unicad-latin5-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'iso-8859-5)
-;;    ))
-   
-;; (defvar unicad-maccyrillic-model
-;;   (list
-;;    (cons 'char2order-map unicad-maccyrillic-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'x-mac-cyrillic)
-;;    ))
-   
-;; (defvar unicad-ibm866-model
-;;   (list
-;;    (cons 'char2order-map unicad-ibm866-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'ibm866)
-;;    ))
-
-;; (defvar unicad-ibm855-model
-;;   (list
-;;    (cons 'char2order-map unicad-ibm855-char2order-map)
-;;    (cons 'precedence-matrix unicad-russian-lang-model)
-;;    (cons 'typ-positive-ratio 0.976601)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'ibm855)
-;;    ))
-
-
 ;;}}}
-
-
-;;;{{{ Bulgarian Model
+;;{{{  Bulgarian Model
 
 ;; ****************************************************************
 ;; 255: Control characters that usually does not exist in any text
@@ -4107,26 +3953,8 @@ no validation needed here. State machine has done that"
     0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 
     ])
 
-;; (defvar unicad-latin5-bulgarian-model
-;;   (list
-;;    (cons 'char2order-map unicad-latin5-bulgarian-char2order-map)
-;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
-;;    (cons 'typ-positive-ratio 0.969392)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'iso-8859-5)))
-
-;; (defvar unicad-win1251-bulgarian-model
-;;   (list
-;;    (cons 'char2order-map unicad-win1251-bulgarian-char2order-map)
-;;    (cons 'precedence-matrix unicad-bulgarian-lang-model)
-;;    (cons 'typ-positive-ratio 0.969392)
-;;    (cons 'keep-english-letter nil)
-;;    (cons 'charset-name 'windows-1251)))
-
 ;;;}}}
-
-
-;;;{{{ Hebrew Model
+;;{{{  Hebrew Model
 ;; ****************************************************************
 ;; 255: Control characters that usually does not exist in any text
 ;; 254: Carriage/Return
@@ -4305,9 +4133,7 @@ no validation needed here. State machine has done that"
    ))
 
 ;;;}}}
-
-
-;;;{{{
+;;{{{  sjis single byte Model
 
 (defvar unicad-sjis-sb-char2order-map
   `[
@@ -4454,8 +4280,7 @@ no validation needed here. State machine has done that"
     ])
 ;;;}}}
 
-
-;;{{{ HZ state machine
+;;{{{  HZ state machine
 
 ;; Esc Charset State Machine
 
@@ -4526,8 +4351,7 @@ no validation needed here. State machine has done that"
    (cons 'name "HZ-GB-2312")))
 
 ;;}}}
-
-;;{{{ iso-2022-cn state machine
+;;{{{  iso-2022-cn state machine
 
 (defconst unicad-iso2022cn-class-table
   [
@@ -4593,8 +4417,7 @@ no validation needed here. State machine has done that"
    (cons 'name "ISO-2022-CN")))
 
 ;;}}}
-
-;;{{{ iso-2022-jp state machine
+;;{{{  iso-2022-jp state machine
 
 (defconst unicad-iso2022jp-class-table
   [
@@ -4661,8 +4484,7 @@ no validation needed here. State machine has done that"
    (cons 'name "ISO-2022-JP")))
 
 ;;}}}
-
-;;{{{ iso-2022-kr state machine
+;;{{{  iso-2022-kr state machine
 
 (defconst unicad-iso2022kr-class-table
   [
