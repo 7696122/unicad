@@ -4,10 +4,10 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-10 10:31:06>
+;; Time-stamp: <2007-06-10 12:21:40>
 ;; Version: v1.0.0
 ;; Keywords: coding-system, auto-coding-functions
-;; X-URL: http://code.google.com/p/unicad/
+;; URL: http://code.google.com/p/unicad/
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -63,6 +63,7 @@
 ;;  * latin-1
 ;;  * latin-2
 
+;;; TODO:
 ;; Follows are planned to be involved in next version:
 ;;  - hebrew
 ;;  - thai
@@ -71,6 +72,16 @@
 ;;  - iso-2022 (Emacs itself can detect iso-2022-cn -jp and -kr corretly)
 ;;  - hz
 
+;;; KNOWN BUGS:
+;; - Some files are too short to be detected.
+;; - Some don't contain the most frequently characters, so that they can't be detected.
+;; - If a japanese text file is encoded with gb18030, it's very hard to be detected.
+;; - GBK characters like "毛(#xC3AB), 狮(#xCAA8)" are similar to utf-8, could be incorrectly detected.
+;;   So I made the priority of gbk and other charsets higher than utf-8.
+;;
+;; *** If you find undetected files, please send me a bug report and attach the files. Many thanks. ***
+
+;;; NEED HELP:
 ;; If some one can provide a language model of japanese katakana (for
 ;; detecting sjis halfwidth katakana only files), please contact me.
 ;; Thanks!
@@ -83,6 +94,7 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.0.1 add support for simplified chinese encoded in big5
 ;; v1.0.0 minor changes, just some tidy works
 ;; v0.65 fixed a bug in `unicad-gbkcht-analyser'
 ;; v0.64 add support for traditional chinese encoded in gbk
@@ -574,6 +586,7 @@ chardet and return the best guess."
     [euc-kr 0 unicad-euckr-prober]
     [euc-tw 0 unicad-euctw-prober]
     [,unicad-chosen-gb-coding-system 0 unicad-gbkcht-prober]
+    [big5 0 unicad-big5chs-prober]
     [utf-8 0 unicad-utf8-prober]
     [utf-16-le 0 unicad-ucs2le-prober]
     [utf-16-be 0 unicad-ucs2be-prober])
@@ -609,7 +622,6 @@ chardet and return the best guess."
       (setq unicad-best-guess (list mBestGuess bestConf)))
     mState))
 
-
 (defun unicad-cjk-prober (start end chardet model dist-table dist-ratio analyser)
   "A generic prober for two byte coding system. e.g. chinese,
 japanese, korean"
@@ -949,6 +961,28 @@ no validation needed here.  State machine has done that"
           (unicad-big5-analyser chr0 chr1)))))
 
 ;;;}}}
+
+;;{{{  big5 prober for simplified chinese
+;; use big5 state machine but use gbk analyser
+
+(defvar unicad-big5chs-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5chs-prober))
+(defvar unicad-gb2312-dist-table '(0 . 0))
+(defsubst unicad-big5chs-prober (start end)
+  (unicad-cjk-prober start end unicad-big5chs-list
+                   unicad-big5-sm-model unicad-gb2312-dist-table
+                   unicad-gb2312-dist-ratio 'unicad-big5chs-analyser))
+
+
+(defun unicad-big5chs-analyser (ch0 ch1)
+  "we convert the big5 code into gbk, than use `unicad-gb2312-analyser' to get the order"
+  (let ((bar (encode-coding-char (decode-char 'big5 (+ (* 256 ch0) ch1)) 'chinese-gbk)))
+    (if bar
+        (let ((chr0 (string-to-char (substring bar 0)))
+              (chr1 (string-to-char (substring bar 1))))
+          (unicad-gb2312-analyser chr0 chr1)))))
+;;}}}
+
+
 ;;{{{  big5 prober
 
 (defvar unicad-big5-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5-prober))
@@ -1598,7 +1632,7 @@ no validation needed here. State machine has done that"
     2 2 2 2 2 2 2 2       ;; 00 - 07
     2 2 2 2 2 2 0 0       ;; 08 - 0f
     2 2 2 2 2 2 2 2       ;; 10 - 17
-    2 2 2 0 2 2 2 2       ;; 18 - 1f
+    2 2 2 2 2 2 2 2       ;; 2 2 2 0 2 2 2 2       ;; 18 - 1f
     2 2 2 2 2 2 2 2       ;; 20 - 27
     2 2 2 2 2 2 2 2       ;; 28 - 2f
     2 2 2 2 2 2 2 2       ;; 30 - 37
@@ -4549,4 +4583,8 @@ no validation needed here. State machine has done that"
 ;;}}}
 
 (provide 'unicad)
+
 ;;; unicad.el ends here
+;;; Local Variables:
+;;; coding: utf-8
+;;; End:
