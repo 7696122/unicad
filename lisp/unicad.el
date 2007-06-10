@@ -4,7 +4,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-10 12:23:18>
+;; Time-stamp: <2007-06-10 12:57:02>
 ;; Version: v1.0.1
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -961,7 +961,6 @@ no validation needed here.  State machine has done that"
           (unicad-big5-analyser chr0 chr1)))))
 
 ;;;}}}
-
 ;;{{{  big5 prober for simplified chinese
 ;; use big5 state machine but use gbk analyser
 
@@ -980,9 +979,8 @@ no validation needed here.  State machine has done that"
         (let ((chr0 (string-to-char (substring bar 0)))
               (chr1 (string-to-char (substring bar 1))))
           (unicad-gb2312-analyser chr0 chr1)))))
+
 ;;}}}
-
-
 ;;{{{  big5 prober
 
 (defvar unicad-big5-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5-prober))
