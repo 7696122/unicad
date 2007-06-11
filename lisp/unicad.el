@@ -4,8 +4,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-11 19:31:24>
-;; Version: v1.0.3
+;; Time-stamp: <2007-06-11 20:23:32>
+;; Version: v1.0.4
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
 
@@ -94,6 +94,7 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.0.4 remove simplified chinese in big5, it's nonsense.
 ;; v1.0.3 fixed charset names of utf-16le and utf-16be (without signature),
 ;;        minor changes for `unicad-ucs2le-prober' and `unicad-ucs2be-prober'
 ;; v1.0.2 changed the sequence of `unicad-multibyte-group-list',
@@ -590,7 +591,6 @@ chardet and return the best guess."
     [big5 0 unicad-big5-prober]
     [euc-tw 0 unicad-euctw-prober]
     [,unicad-chosen-gb-coding-system 0 unicad-gbkcht-prober]
-    [big5 0 unicad-big5chs-prober]
     [utf-8 0 unicad-utf8-prober]
     [utf-16le 0 unicad-ucs2le-prober]
     [utf-16be 0 unicad-ucs2be-prober])
@@ -971,26 +971,6 @@ no validation needed here.  State machine has done that"
           (unicad-big5-analyser chr0 chr1)))))
 
 ;;;}}}
-;;{{{  big5 prober for simplified chinese
-;; use big5 state machine but use gbk analyser
-
-(defvar unicad-big5chs-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5chs-prober))
-(defvar unicad-gb2312-dist-table '(0 . 0))
-(defsubst unicad-big5chs-prober (start end)
-  (unicad-cjk-prober start end unicad-big5chs-list
-                   unicad-big5-sm-model unicad-gb2312-dist-table
-                   unicad-gb2312-dist-ratio 'unicad-big5chs-analyser))
-
-
-(defun unicad-big5chs-analyser (ch0 ch1)
-  "we convert the big5 code into gbk, than use `unicad-gb2312-analyser' to get the order"
-  (let ((bar (encode-coding-char (decode-char 'big5 (+ (* 256 ch0) ch1)) 'chinese-gbk)))
-    (if bar
-        (let ((chr0 (string-to-char (substring bar 0)))
-              (chr1 (string-to-char (substring bar 1))))
-          (unicad-gb2312-analyser chr0 chr1)))))
-
-;;}}}
 ;;{{{  big5 prober
 
 (defvar unicad-big5-list (unicad-chardet unicad-multibyte-group-list 'unicad-big5-prober))
