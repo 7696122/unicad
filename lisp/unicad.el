@@ -4,7 +4,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-11 19:26:33>
+;; Time-stamp: <2007-06-11 19:31:24>
 ;; Version: v1.0.3
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -664,7 +664,7 @@ japanese, korean"
          (t nil))
         (setq code0 code1))
       (if (eq mState 'eDetecting)
-          (if (and (> (setq mConfidence (unicad-dist-table-get-confidence dist-table dist-ratio size mb-num
+          (if (and (> (setq mConfidence (unicad-dist-table-get-confidence dist-table dist-ratio size
                                                                           (eq unicad-cjk-prefer mCodingSystem)))
                       unicad-threshold)
                    (> (unicad-dist-table-total-chars dist-table)
@@ -1914,7 +1914,7 @@ no validation needed here. State machine has done that"
 (defsubst unicad-dist-table-freq-chars++ (dist-table)
   (setcdr dist-table (1+ (cdr dist-table))))
 
-(defun unicad-dist-table-get-confidence (dist-table dist-ratio size total-mbyte &optional prefer)
+(defun unicad-dist-table-get-confidence (dist-table dist-ratio size &optional prefer)
   (let ((Confidence 0.0)
         (total-chars (unicad-dist-table-total-chars dist-table))
         (freq-chars (unicad-dist-table-freq-chars dist-table)))
