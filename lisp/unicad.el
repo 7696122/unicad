@@ -4,8 +4,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-11 18:22:14>
-;; Version: v1.0.2
+;; Time-stamp: <2007-06-11 19:26:33>
+;; Version: v1.0.3
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
 
@@ -45,8 +45,8 @@
 ;;    - euc-kr
 ;;    - euc-tw
 ;;    - utf-8
-;;    - utf-16le
-;;    - utf-16be
+;;    - utf-16le (also without signature)
+;;    - utf-16be (also without signature)
 ;;  * singlebyte coding systems:
 ;;    - greek 
 ;;      > iso-8859-7 
@@ -94,6 +94,8 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.0.3 fixed charset names of utf-16le and utf-16be (without signature),
+;;        minor changes for `unicad-ucs2le-prober' and `unicad-ucs2be-prober'
 ;; v1.0.2 changed the sequence of `unicad-multibyte-group-list',
 ;;        fixed a bug in `unicad-dist-table-get-confidence'     
 ;; v1.0.1 add support for simplified chinese encoded in big5
@@ -590,8 +592,8 @@ chardet and return the best guess."
     [,unicad-chosen-gb-coding-system 0 unicad-gbkcht-prober]
     [big5 0 unicad-big5chs-prober]
     [utf-8 0 unicad-utf8-prober]
-    [utf-16-le 0 unicad-ucs2le-prober]
-    [utf-16-be 0 unicad-ucs2be-prober])
+    [utf-16le 0 unicad-ucs2le-prober]
+    [utf-16be 0 unicad-ucs2be-prober])
   "([CODING-SYSTEM BEST-CONFIDENCE PROBER-FUNCTION] ...)")
 
 (defun unicad-multibyte-group-prober (start end)
@@ -753,7 +755,10 @@ newline, space, numbers and english letters."
                   (and (> code1 ?A) (< code1 ?Z)))
               (setq count (1+ count)))
           (if (> count 10)
-              (setq mState 'eFoundIt)))))
+              (progn
+                (setq mState 'eFoundIt)
+                (unicad-chardet-set-confidence unicad-ucs2be-list unicad--sure-yes))
+            (unicad-chardet-set-confidence unicad-ucs2be-list unicad--sure-no)))))
     mState))
 
 (defvar unicad-ucs2le-list (unicad-chardet unicad-multibyte-group-list 'unicad-ucs2le-prober))
@@ -785,7 +790,10 @@ newline, space, numbers and english letters."
                   (and (> code0 ?A) (< code0 ?Z)))
               (setq count (1+ count)))
           (if (> count 10)
-              (setq mState 'eFoundIt)))))
+              (progn
+                (setq mState 'eFoundIt)
+                (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-yes))
+            (unicad-chardet-set-confidence unicad-ucs2le-list unicad--sure-no)))))
     mState))
 
 ;;}}}
