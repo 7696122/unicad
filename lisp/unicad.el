@@ -4,8 +4,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-10 12:57:02>
-;; Version: v1.0.1
+;; Time-stamp: <2007-06-11 18:22:14>
+;; Version: v1.0.2
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
 
@@ -94,6 +94,8 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.0.2 changed the sequence of `unicad-multibyte-group-list',
+;;        fixed a bug in `unicad-dist-table-get-confidence'     
 ;; v1.0.1 add support for simplified chinese encoded in big5
 ;; v1.0.0 minor changes, just some tidy works
 ;; v0.65 fixed a bug in `unicad-gbkcht-analyser'
@@ -579,11 +581,11 @@ chardet and return the best guess."
    (t 'gb2312)))
 
 (defvar unicad-multibyte-group-list
-  `([,unicad-chosen-gb-coding-system 0 unicad-gb2312-prober]
-    [big5 0 unicad-big5-prober]
-    [sjis 0 unicad-sjis-prober]
+  `([sjis 0 unicad-sjis-prober]
     [euc-jp 0 unicad-eucjp-prober]
+    [,unicad-chosen-gb-coding-system 0 unicad-gb2312-prober]
     [euc-kr 0 unicad-euckr-prober]
+    [big5 0 unicad-big5-prober]
     [euc-tw 0 unicad-euctw-prober]
     [,unicad-chosen-gb-coding-system 0 unicad-gbkcht-prober]
     [big5 0 unicad-big5chs-prober]
@@ -660,7 +662,7 @@ japanese, korean"
          (t nil))
         (setq code0 code1))
       (if (eq mState 'eDetecting)
-          (if (and (> (setq mConfidence (unicad-dist-table-get-confidence dist-table dist-ratio size
+          (if (and (> (setq mConfidence (unicad-dist-table-get-confidence dist-table dist-ratio size mb-num
                                                                           (eq unicad-cjk-prefer mCodingSystem)))
                       unicad-threshold)
                    (> (unicad-dist-table-total-chars dist-table)
@@ -1904,7 +1906,7 @@ no validation needed here. State machine has done that"
 (defsubst unicad-dist-table-freq-chars++ (dist-table)
   (setcdr dist-table (1+ (cdr dist-table))))
 
-(defun unicad-dist-table-get-confidence (dist-table dist-ratio size &optional prefer)
+(defun unicad-dist-table-get-confidence (dist-table dist-ratio size total-mbyte &optional prefer)
   (let ((Confidence 0.0)
         (total-chars (unicad-dist-table-total-chars dist-table))
         (freq-chars (unicad-dist-table-freq-chars dist-table)))
@@ -1912,6 +1914,8 @@ no validation needed here. State machine has done that"
      ((and (> size unicad-minimum-size-threshold)
            (or (<= total-chars (- (/ unicad-minimum-size-threshold 2) 4))    ;; this was `0'
                (< freq-chars unicad-minimum-data-threshold)))
+      (setq Confidence unicad--sure-no))
+     ((<= total-chars 0)
       (setq Confidence unicad--sure-no))
      ((/= total-chars freq-chars)
       (setq Confidence (min (/ freq-chars (* (- total-chars freq-chars) dist-ratio))
