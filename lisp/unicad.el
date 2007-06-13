@@ -4,8 +4,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-13 15:49:44>
-;; Version: v1.0.6
+;; Time-stamp: <2007-06-13 17:27:28>
+;; Version: v1.1.0
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
 
@@ -31,7 +31,10 @@
 ;; Put this file into your load-path and the following into your ~/.emacs:
 ;;   (require 'unicad)
 ;;
-;; It may take a few seconds to detect some long latin-1 or latin-2 files,
+;; You can disable unicad by M-x `unicad-disable' and enable it by M-x
+;; `unicad-enable' or `unicad'.
+;;
+;; It may take a few seconds to detect some large latin-1 or latin-2 files,
 ;; you can byte-compile this file to speed up detecting process.
 
 ;; Following coding systems can be auto detected:
@@ -96,6 +99,7 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.1.0 Added interactive functions `unicad-enable', `unicad-disable' and `unicad'.
 ;; v1.0.6 Fixed a bug in `unicad-gbkcht-analyser' for some incompatitable reason.
 ;; v1.0.5 Changed define order to eliminate byte-compile warnings.
 ;; v1.0.4 remove simplified chinese in big5, it's nonsense.
@@ -128,6 +132,7 @@
 (eval-when-compile
   (require 'cl))
 
+(defvar unicad-global-enable t)
 (defvar unicad-quick-size 500)
 (defvar unicad-quick-multibyte-words  50)
 (defvar unicad-quick-singlebyte-words 50)
@@ -162,12 +167,28 @@
 
 ;;}}}
 
+;;{{{  unicad-enable, unicad-disable
+(defun unicad-enable ()
+  (interactive)
+  (setq unicad-global-enable t)
+  (message "Unicad enabled."))
+
+(defun unicad-disable ()
+  (interactive)
+  (setq unicad-global-enable -1)
+  (message "Unicad DISABLED."))
+
+(defalias 'unicad 'unicad-enable)
+;;}}}
+
 ;;{{{  Auto Coding Function
 ;; ePureAscii, eEscAscii -> unicad-default-coding-system
 ;; eHighbyte -> multibyte-group-prober -> latin1->prober
 (defun unicad-universal-charset-detect (size)
   "detect charset"
-  (when (not (local-variable-p 'buffer-file-coding-system))
+  (when (and  (or (and (numberp unicad-global-enable) (> unicad-global-enable 0))
+                  (eq unicad-global-enable t))
+              (not (local-variable-p 'buffer-file-coding-system)))
     (save-excursion
       (let ((end (+ (point) (min size unicad-max-size)))
             (input-state 'ePureAscii)
