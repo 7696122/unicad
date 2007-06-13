@@ -27,8 +27,8 @@ unicad --- Universal Charset Auto Detector for Emacs    -*-outline-*-
 * Requirements
 ==============
 
-  Unicad has been tested on Emacs21, Emacs22 and Emacs23 (CVS
-  unicode-branch-2) under Ubuntu 7.04 and Windows XP.
+  Unicad has been tested on Emacs22.1 and Emacs23 (CVS branch
+  emacs-unicode-2) under Ubuntu 7.04 and Windows XP.
 
 * Installation
 ==============

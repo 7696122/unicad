@@ -4,8 +4,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-12 23:10:49>
-;; Version: v1.0.5
+;; Time-stamp: <2007-06-13 15:49:44>
+;; Version: v1.0.6
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
 
@@ -78,6 +78,8 @@
 ;; - If a japanese text file is encoded with gb18030, it's very hard to be detected.
 ;; - GBK characters like "毛(#xC3AB), 狮(#xCAA8)" are similar to utf-8, could be incorrectly detected.
 ;;   So I made the priority of gbk and other charsets higher than utf-8.
+;; - Detecting traditional chinese encoded in gbk is not supported in Emacs 22.1 and below,
+;;   because the function `decode-char' only support `ucs'.
 ;;
 ;; *** If you find undetected files, please send me a bug report and attach the files. Many thanks. ***
 
@@ -94,6 +96,7 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.0.6 Fixed a bug in `unicad-gbkcht-analyser' for some incompatitable reason.
 ;; v1.0.5 Changed define order to eliminate byte-compile warnings.
 ;; v1.0.4 remove simplified chinese in big5, it's nonsense.
 ;; v1.0.3 fixed charset names of utf-16le and utf-16be (without signature),
@@ -3905,11 +3908,13 @@ no validation needed here.  State machine has done that"
 
 (defun unicad-gbkcht-analyser (ch0 ch1)
   "we convert the gbk code into big5, than use `unicad-big5-analyser' to get the order"
-  (let ((bar (encode-coding-char (decode-char 'chinese-gbk (+ (* 256 ch0) ch1)) 'big5)))
-    (if bar
-        (let ((chr0 (string-to-char (substring bar 0)))
-              (chr1 (string-to-char (substring bar 1))))
-          (unicad-big5-analyser chr0 chr1)))))
+  (let ((chargbk (decode-char 'chinese-gbk (+ (* 256 ch0) ch1))))
+    (when chargbk
+      (let ((bar (encode-coding-char chargbk 'big5)))
+        (if bar
+            (let ((chr0 (string-to-char (substring bar 0)))
+                  (chr1 (string-to-char (substring bar 1))))
+              (unicad-big5-analyser chr0 chr1)))))))
 
 ;;;}}}
 ;;{{{  big5 prober
