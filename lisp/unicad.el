@@ -4,7 +4,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-06-13 17:27:28>
+;; Time-stamp: <2007-07-21 14:25:56>
 ;; Version: v1.1.0
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -68,6 +68,7 @@
 
 ;;; TODO:
 ;; Follows are planned to be involved in next version:
+;;  - iso-8859-9 (turkish, latin-5)
 ;;  - hebrew
 ;;  - thai
 ;;  - x-mac-cyrillic
@@ -153,6 +154,8 @@
 (defvar unicad-best-guess nil
   "(MACHINE-BEST-GUESS BEST-CONFIDENCE)")
 
+(make-variable-buffer-local 'unicad-best-guess)
+
 (defvar unicad-singlebyte-best-guess nil)
 
 (defvar unicad-singlebyte-group-guess nil)
@@ -164,6 +167,27 @@
 
 (defvar unicad-latin2-guess
   '(latin-2 0.0))
+
+(defvar unicad-chosen-gb-coding-system 
+  (cond 
+   ((coding-system-p 'gb18030)
+    'gb18030)
+   ((coding-system-p 'gbk)
+    'gbk)
+   (t 'gb2312)))
+
+(defvar unicad-multibyte-group-list
+  `([sjis 0 unicad-sjis-prober]
+    [euc-jp 0 unicad-eucjp-prober]
+    [,unicad-chosen-gb-coding-system 0 unicad-gb2312-prober]
+    [euc-kr 0 unicad-euckr-prober]
+    [big5 0 unicad-big5-prober]
+    [euc-tw 0 unicad-euctw-prober]
+    [,unicad-chosen-gb-coding-system 0 unicad-gbkcht-prober]
+    [utf-8 0 unicad-utf8-prober]
+    [utf-16le 0 unicad-ucs2le-prober]
+    [utf-16be 0 unicad-ucs2be-prober])
+  "([CODING-SYSTEM BEST-CONFIDENCE PROBER-FUNCTION] ...)")
 
 ;;}}}
 
@@ -182,6 +206,16 @@
 ;;}}}
 
 ;;{{{  Auto Coding Function
+
+(defun unicad-char-after (&optional pos)
+  (let (char)
+    (if pos
+        (setq char (char-after pos))
+      (setq char (char-after)))
+    (if (> char #xff)
+        (setq char (logand char #xff)))
+    char))
+
 ;; ePureAscii, eEscAscii -> unicad-default-coding-system
 ;; eHighbyte -> multibyte-group-prober -> latin1->prober
 (defun unicad-universal-charset-detect (size)
@@ -189,69 +223,82 @@
   (when (and  (or (and (numberp unicad-global-enable) (> unicad-global-enable 0))
                   (eq unicad-global-enable t))
               (not (local-variable-p 'buffer-file-coding-system)))
-    (save-excursion
-      (let ((end (+ (point) (min size unicad-max-size)))
-            (input-state 'ePureAscii)
-            code0 code1 code2 state prober-result
-            start quick-start quick-end)
-        (unless (setq prober-result (unicad-bom-detect))
-          (goto-char (point-min))
-          (while (and (not (eq state 'mDone))
-                      (eq input-state 'ePureAscii)
-                      (< (point) end))
-            (setq code1 (char-after))
-            (forward-char 1)
-            (if (and (>= code1 #x80)
-                     (/= code1 #xA0)) ;; since many Ascii only page contains NBSP
-                ;; we got a non-ascii byte (high-byte)
-                (setq input-state 'eHighbyte
-                      start (1- (point)))
-              ;; OK, just pure ascii so far
-              (if (and (eq input-state 'ePureAscii)
-                       (or (= code1 #x1B) ;; ESC char
-                           (and (= code1 ?{ ) (= code0 ?~ )))) ;; HZ "~{"
-                  ;; found escape character or HZ "~{"
-                  (setq input-state 'eEscAscii
-                        start (1- (point))))
-              (setq code0 code1)))
-          (cond
-           ((eq input-state 'eEscAscii)
-            ;; actually emacs itself can tell the esc charset very well
-            ;; so we don't need to do ourselves
-            ;; (unicad-esc-group-prober (point-min) end)
-            )
-           ((eq input-state 'eHighbyte)
-            (if (> (- end start) unicad-quick-size)
+    (let ((buf (current-buffer)))
+;;       (make-local-variable 'unicad-best-guess)
+;;       (make-local-variable 'unicad-singlebyte-best-guess)
+;;       (make-local-variable 'unicad-singlebyte-group-guess)
+;;       (make-local-variable 'unicad-latin-best-guess)
+;;       (make-local-variable 'unicad-latin1-guess)
+;;       (make-local-variable 'unicad-latin2-guess)
+;;       (make-local-variable 'unicad-multibyte-group-list)
+      (save-excursion
+        (let ((end (+ (point) (min size unicad-max-size)))
+              (input-state 'ePureAscii)
+              code0 code1 code2 state prober-result
+              start quick-start quick-end
+              )
+          (unless (setq prober-result (unicad-bom-detect))
+            (goto-char (point-min))
+            (while (and (not (eq state 'mDone))
+                        (eq input-state 'ePureAscii)
+                        (< (point) end))
+              (setq code1 (unicad-char-after))
+              (forward-char 1)
+              (if (and (>= code1 #x80)
+                       (/= code1 #xA0)) ;; since many Ascii only page contains NBSP
+                  ;; we got a non-ascii byte (high-byte)
+                  (setq input-state 'eHighbyte
+                        start (1- (point)))
+                ;; OK, just pure ascii so far
+                (if (and (eq input-state 'ePureAscii)
+                         (or (= code1 #x1B) ;; ESC char
+                             (and (= code1 ?{ ) (= code0 ?~ )))) ;; HZ "~{"
+                    ;; found escape character or HZ "~{"
+                    (setq input-state 'eEscAscii
+                          start (1- (point))))
+                (setq code0 code1)))
+            (cond
+             ((eq input-state 'eEscAscii)
+              ;; actually emacs itself can tell the esc charset very well
+              ;; so we don't need to do ourselves
+              ;; (unicad-esc-group-prober (point-min) end)
+              )
+             ((eq input-state 'eHighbyte)
+              (if (> (- end start) unicad-quick-size)
+                  (setq quick-start start
+                        quick-end (+ unicad-quick-size start))
                 (setq quick-start start
-                      quick-end (+ unicad-quick-size start))
-              (setq quick-start start
-                    quick-end end))
-            (let ((maxConfidence 0.0)
-                  quick-status)
-              (cond
-               ((eq (setq quick-status
-                          (unicad-multibyte-group-prober quick-start quick-end)) 'eFoundIt)
-                (setq prober-result (car unicad-best-guess))
-                (setq maxConfidence unicad--sure-yes))
-               ((and (not (eq quick-status 'eNotMe))
-                     (/= quick-end end)
-                     (eq (unicad-multibyte-group-prober start end) 'eFoundIt))
-                (setq prober-result (car unicad-best-guess))
-                (setq maxConfidence unicad--sure-yes))
-               ((eq (unicad-singlebyte-group-prober start end) 'eFoundIt)
-                (setq prober-result (car unicad-singlebyte-best-guess)))
-               (t
-                (setq maxConfidence (unicad-latin-group-prober start end))
-                (if (> (cadr unicad-singlebyte-best-guess) (cadr unicad-best-guess))
-                    (setq unicad-best-guess unicad-singlebyte-best-guess))
-                (if (> maxConfidence (cadr unicad-best-guess))
-                    (setq prober-result (car unicad-latin-best-guess)
-                          unicad-best-guess unicad-latin-best-guess)
-                  (setq prober-result (car unicad-best-guess)
-                        maxConfidence (cadr unicad-best-guess)))))))))
-        (unless (coding-system-p prober-result)
+                      quick-end end))
+              (let ((maxConfidence 0.0)
+                    quick-status)
+                (cond
+                 ((eq (setq quick-status
+                            (unicad-multibyte-group-prober quick-start quick-end)) 'eFoundIt)
+                  (setq prober-result (car unicad-best-guess))
+                  (setq maxConfidence unicad--sure-yes))
+                 ((and (not (eq quick-status 'eNotMe))
+                       (/= quick-end end)
+                       (eq (unicad-multibyte-group-prober start end) 'eFoundIt))
+                  (setq prober-result (car unicad-best-guess))
+                  (setq maxConfidence unicad--sure-yes))
+                 ((eq (unicad-singlebyte-group-prober start end) 'eFoundIt)
+                  (setq prober-result (car unicad-singlebyte-best-guess)))
+                 (t
+                  (setq maxConfidence (unicad-latin-group-prober start end))
+                  (if (> (cadr unicad-singlebyte-best-guess) (cadr unicad-best-guess))
+;;                       (set (make-local-variable 'unicad-best-guess) unicad-singlebyte-best-guess)
+                      (setq unicad-best-guess unicad-singlebyte-best-guess)
+                    )
+                  (if (> maxConfidence (cadr unicad-best-guess))
+                      (setq prober-result (car unicad-latin-best-guess)
+                            unicad-best-guess unicad-latin-best-guess)
+                    (setq prober-result (car unicad-best-guess)
+                          maxConfidence (cadr unicad-best-guess)))))))))
+;;           (test-foo)
+;;           (message "%S" (current-buffer))
+          (unless (coding-system-p prober-result)
             (setq prober-result unicad-default-coding-system))
-        (or prober-result unicad-default-coding-system)))))
+          (or prober-result unicad-default-coding-system))))))
 
 (if (>= emacs-major-version 22)
     (add-to-list 'auto-coding-functions 'unicad-universal-charset-detect)
@@ -274,13 +321,13 @@ utf-16be ..."
     (goto-char (point-min))
     (when (> (point-max) 3)
       (let (code0 code1 code2 code3)
-        (setq code0 (char-after))
+        (setq code0 (unicad-char-after))
         (forward-char)
-        (setq code1 (char-after))
+        (setq code1 (unicad-char-after))
         (forward-char)
-        (setq code2 (char-after))
+        (setq code2 (unicad-char-after))
         (forward-char)
-        (setq code3 (char-after))
+        (setq code3 (unicad-char-after))
         (forward-char)
         (cond
          ((and (= code0 #xEF)
@@ -1409,12 +1456,12 @@ chardet and return the best guess."
                   (eq mState 'eDetecting)
                   (< words unicad-quick-singlebyte-words)
                   )
-        (setq code (char-after))
+        (setq code (unicad-char-after))
         (forward-char)
         (when (and (>= code #x80) (not meetMSB))
           (setq meetMSB t)
           (goto-char word-mark)
-          (setq code (char-after))
+          (setq code (unicad-char-after))
           (forward-char)
           )
         (if (and 
@@ -3540,27 +3587,6 @@ chardet and return the best guess."
 
 ;;{{{  Multibyte Prober
 
-(defvar unicad-chosen-gb-coding-system 
-  (cond 
-   ((coding-system-p 'gb18030)
-    'gb18030)
-   ((coding-system-p 'gbk)
-    'gbk)
-   (t 'gb2312)))
-
-(defvar unicad-multibyte-group-list
-  `([sjis 0 unicad-sjis-prober]
-    [euc-jp 0 unicad-eucjp-prober]
-    [,unicad-chosen-gb-coding-system 0 unicad-gb2312-prober]
-    [euc-kr 0 unicad-euckr-prober]
-    [big5 0 unicad-big5-prober]
-    [euc-tw 0 unicad-euctw-prober]
-    [,unicad-chosen-gb-coding-system 0 unicad-gbkcht-prober]
-    [utf-8 0 unicad-utf8-prober]
-    [utf-16le 0 unicad-ucs2le-prober]
-    [utf-16be 0 unicad-ucs2be-prober])
-  "([CODING-SYSTEM BEST-CONFIDENCE PROBER-FUNCTION] ...)")
-
 (defun unicad-multibyte-group-prober (start end)
   "extract the multibyte chardet prober functions from
 `unicad-multibyte-group-list', compare the confidence of each
@@ -3605,12 +3631,12 @@ japanese, korean"
     (unicad-dist-table-reset dist-table)
     (save-excursion
       (goto-char start)
-      (setq code1 (char-after))
+      (setq code1 (unicad-char-after))
       (while (and (< (point) end)
                   (eq mState 'eDetecting)
                   (< mb-num unicad-quick-multibyte-words))
-        (setq code1 (char-after)
-              codingState (unicad-next-state code1 model))
+        (setq code1 (unicad-char-after))
+        (setq codingState (unicad-next-state code1 model))
         (forward-char 1)
         (cond
          ;; we are interested only in 2-byte
@@ -3656,7 +3682,7 @@ machine (`unicad-next-state') and get the confidence"
       (goto-char start)
       (while (and (< (point) end)
                   (eq mState 'eDetecting))
-        (setq codingState (unicad-next-state (char-after)
+        (setq codingState (unicad-next-state (unicad-char-after)
                                            unicad-utf8-sm-model))
         (setq charlen (unicad-sm-get 'mCharLen))
         (forward-char 1)
@@ -3707,9 +3733,9 @@ newline, space, numbers and english letters."
       (goto-char start)
       (while (and (< (point) end)
                   (eq mState 'eNotMe))
-        (setq code0 (char-after))
+        (setq code0 (unicad-char-after))
         (forward-char 1)
-        (setq code1 (char-after))
+        (setq code1 (unicad-char-after))
         (forward-char 1)
         (when (= code0 0)
           (if (or (= code1 #x0d)
@@ -3742,9 +3768,9 @@ newline, space, numbers and english letters."
       (goto-char start)
       (while (and (< (point) end)
                   (eq mState 'eNotMe))
-        (setq code0 (char-after))
+        (setq code0 (unicad-char-after))
         (forward-char 1)
-        (setq code1 (char-after))
+        (setq code1 (unicad-char-after))
         (forward-char 1)
         (when (= code1 0)
           (if (or (= code0 #x0d)
@@ -4134,6 +4160,70 @@ no validation needed here. State machine has done that"
 
 ;;;}}}
 
+;;{{{  Latin5 iso-8859-9 Turkish
+
+(defvar unicad-latin5-class-num  9)   ;; total classes
+(defvar unicad-latin5-class-table
+  (let ((UDF 0) ;; undefined
+        (OTH 1) ;; other
+        (ASC 2) ;; ascii capital letter
+        (ASS 3) ;; ascii small letter
+        (ACV 4) ;; accent capital vowel
+        (ACO 5) ;; accent capital other
+        (ASV 6) ;; accent small vowel
+        (ASO 7) ;; accent small other
+        (OTS 8) ;; Other Symbol (>= #xA0)
+        )
+    (vector
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 00 - 07
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 08 - 0F
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 10 - 17
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 18 - 1F
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 20 - 27
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 28 - 2F
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 30 - 37
+     OTH  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 38 - 3F
+     OTH  ASC  ASC  ASC  ASC  ASC  ASC  ASC ;; 40 - 47
+     ASC  ASC  ASC  ASC  ASC  ASC  ASC  ASC ;; 48 - 4F
+     ASC  ASC  ASC  ASC  ASC  ASC  ASC  ASC ;; 50 - 57
+     ASC  ASC  ASC  OTH  OTH  OTH  OTH  OTH ;; 58 - 5F
+     OTH  ASS  ASS  ASS  ASS  ASS  ASS  ASS ;; 60 - 67
+     ASS  ASS  ASS  ASS  ASS  ASS  ASS  ASS ;; 68 - 6F
+     ASS  ASS  ASS  ASS  ASS  ASS  ASS  ASS ;; 70 - 77
+     ASS  ASS  ASS  OTH  OTH  OTH  OTH  OTH ;; 78 - 7F
+     OTH  UDF  OTH  ASO  OTH  OTH  OTH  OTH ;; 80 - 87
+     OTH  OTH  ACO  OTH  ACO  UDF  ACO  UDF ;; 88 - 8F
+     UDF  OTH  OTH  OTH  OTH  OTH  OTH  OTH ;; 90 - 97
+     OTH  OTH  ASO  OTH  ASO  UDF  ASO  ACO ;; 98 - 9F
+     OTS  OTS  OTS  OTS  OTS  OTS  OTS  OTS ;; A0 - A7
+     OTS  OTS  OTS  OTS  OTS  OTS  OTS  OTS ;; A8 - AF
+     OTS  OTS  OTS  OTS  OTS  OTS  OTS  OTS ;; B0 - B7
+     OTS  OTS  OTS  OTS  OTS  OTS  OTS  OTS ;; B8 - BF
+     ACV  ACV  ACV  ACV  ACV  ACV  ACO  ACO ;; C0 - C7
+     ACV  ACV  ACV  ACV  ACV  ACV  ACV  ACV ;; C8 - CF
+     ACO  ACO  ACV  ACV  ACV  ACV  ACV  OTS ;; D0 - D7
+     ACV  ACV  ACV  ACV  ACV  ACO  ACO  ASO ;; D8 - DF
+     ASV  ASV  ASV  ASV  ASV  ASV  ASO  ASO ;; E0 - E7
+     ASV  ASV  ASV  ASV  ASV  ASV  ASV  ASV ;; E8 - EF
+     ASO  ASO  ASV  ASV  ASV  ASV  ASV  OTS ;; F0 - F7
+     ASV  ASV  ASV  ASV  ASV  ASO  ASO  ASO ;; F8 - FF
+     )))
+
+(defvar unicad-latin5-model
+  [
+;; UDF OTH ASC ASS ACV ACO ASV ASO OTS
+   0   0   0   0   0   0   0   0   0 ;; UDF last char
+   0   3   3   3   3   3   3   3   3 ;; OTH
+   0   3   3   3   3   3   3   3   2 ;; ASC
+   0   3   3   3   1   1   3   3   2 ;; ASS
+   0   3   3   3   1   2   1   2   1 ;; ACV
+   0   3   3   3   3   3   3   3   1 ;; ACO
+   0   3   1   3   1   1   1   3   1 ;; ASV
+   0   3   1   3   1   1   3   3   1 ;; ASO
+   0   3   2   2   2   2   1   1   1 ;; OTS
+   ])
+;;;}}}
+
 ;;{{{  latin1 state machine
 (defvar unicad-latin1-class-num  9)   ;; total classes
 (defvar unicad-latin1-class-table
@@ -4197,7 +4287,7 @@ no validation needed here. State machine has done that"
    ])
 ;;}}}
 
-;;{{{  latin1 prober
+;;{{{  latin prober
 
 (defun unicad-latin-group-prober (start end)
   "for latin-1 and latin-2"
@@ -4228,7 +4318,7 @@ no validation needed here. State machine has done that"
       (while (and (< (point) end)
                   (not (eq mState 'eNotMe))
                   (< (aref mFreqCounter 3) 2000))
-        (setq code1 (char-after))
+        (setq code1 (unicad-char-after))
         (forward-char 1)
         (setq code1-class (aref class-table code1))
         (setq freq (aref latin-model
@@ -4586,7 +4676,7 @@ no validation needed here. State machine has done that"
       (goto-char start)
       (while (and (< (point) end)
                   (eq mState 'eDetecting))
-        (setq code1 (char-after))
+        (setq code1 (unicad-char-after))
         (forward-char 1)
         (setq codingState (unicad-next-state code1 model))
         (cond
