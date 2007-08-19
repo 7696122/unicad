@@ -4,7 +4,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-07-21 14:25:56>
+;; Time-stamp: <2007-08-19 02:06:18>
 ;; Version: v1.1.0
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -100,6 +100,7 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.1.1 Fixed a bug in `unicad-sjis-sb-prober', added a char2order 256 for impossible char. 
 ;; v1.1.0 Added interactive functions `unicad-enable', `unicad-disable' and `unicad'.
 ;; v1.0.6 Fixed a bug in `unicad-gbkcht-analyser' for some incompatitable reason.
 ;; v1.0.5 Changed define order to eliminate byte-compile warnings.
@@ -1233,14 +1234,14 @@ utf-16be ..."
     155 156 157 158 159 160 161 162 163 164 165 253 253 253 253 253 ;;50
     253  71 172  66 173  65 174  76 175  64 176 177  77  72 178  69 ;;60
     67 179  78  73 180 181  79 182 183 184 185 253 253 253 253 253 ;;70
-    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 ;;80
-    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 ;;90
-    255 252 254 254 254  16  59  37  17  58  31  53  49  33  40  24;;a0
+    256 256 256 256 256 256 256 256 256 256 256 256 256 256 256 256 ;;80
+    256 256 256 256 256 256 256 256 256 256 256 256 256 256 256 256 ;;90
+    256 252 254 254 254  16  59  37  17  58  31  53  49  33  40  24;;a0
       2  13   8  22  34  43  27  19   7  38  23  35  14   6  44  29;;b0
      10  48  50  12   3  46  39  57  47  54  25  28   5  32  41  21;;c0
      45  30  26  42  55  52  56  20  15  11  36  18  51   4   1   9;;d0
-    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255;;e0
-    255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255;;f0
+    256 256 256 256 256 256 256 256 256 256 256 256 256 256 256 256;;e0
+    256 256 256 256 256 256 256 256 256 256 256 256 256 256 256 256;;f0
     ])
 
 (defvar unicad-sjis-sb-lang-model
@@ -1472,7 +1473,7 @@ chardet and return the best guess."
                   word-mark (point)
                   words (1+ words)))
         (when meetMSB
-          (setq order1 (aref char2order-map code))
+          (setq order1 (aref char2order-map code))          
           (if (< order1 unicad-symbol-cat-order)
               (setq total-char (1+ total-char)))
           (when (< order1 unicad-sample-size)
@@ -1487,6 +1488,8 @@ chardet and return the best guess."
                  seq-counters
                  (aref lang-model (+ order0 (* order1 unicad-sample-size)))))
               ))
+          (if (> order1 255)
+              (setq mState 'eNotMe))
           (setq order0 order1))))
     (setq cf (unicad-singlebyte-get-confidence 
               positive-ratio total-char freq-char total-seqs seq-counters))
