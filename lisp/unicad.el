@@ -4,8 +4,8 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-08-19 16:51:09>
-;; Version: v1.1.1
+;; Time-stamp: <2007-09-05 23:59:12>
+;; Version: v1.1.3
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
 
@@ -67,6 +67,7 @@
 ;;  * latin-2
 
 ;;; TODO:
+;; Endline pattern
 ;; Follows are planned to be involved in next version:
 ;;  - iso-8859-9 (turkish, latin-5)
 ;;  - hebrew
@@ -75,8 +76,10 @@
 ;;  - ibm866
 ;;  - iso-2022 (Emacs itself can detect iso-2022-cn -jp and -kr corretly)
 ;;  - hz
+;; Local Variables
 
 ;;; KNOWN BUGS:
+;; - Conflict with ido when exit Emacs. Add `unicad-disable' to `kill-emacs-hook' to avoid this problem.
 ;; - Some files are too short to be detected.
 ;; - Some don't contain the most frequently characters, so that they can't be detected.
 ;; - If a japanese text file is encoded with gb18030, it's very hard to be detected.
@@ -100,8 +103,11 @@
 ;;;}}}
 
 ;;;{{{ Changelog
+;; v1.1.3 detect dos eol-type
+;; v1.1.2 (add-to-hook 'kill-emacs-hook 'unicad-disable) to avoid conflict with ido, session, etc.
 ;; v1.1.1 Fixed a bug in `unicad-sjis-sb-prober', added a char2order 256 for impossible char. 
 ;; v1.1.0 Added interactive functions `unicad-enable', `unicad-disable' and `unicad'.
+;;        Add support for compressed files. 
 ;; v1.0.6 Fixed a bug in `unicad-gbkcht-analyser' for some incompatitable reason.
 ;; v1.0.5 Changed define order to eliminate byte-compile warnings.
 ;; v1.0.4 remove simplified chinese in big5, it's nonsense.
@@ -135,11 +141,12 @@
   (require 'cl))
 
 (defvar unicad-global-enable t)
+(defvar unicad-eol nil)
 (defvar unicad-quick-size 500)
 (defvar unicad-quick-multibyte-words  50)
 (defvar unicad-quick-singlebyte-words 50)
 (defvar unicad-max-size 10000)
-(defvar unicad-default-coding-system nil)
+(defvar unicad-default-coding-system 'nil)
 
 (defvar unicad-threshold 0.95)
 (defvar unicad-data-threshold 1024)
@@ -155,7 +162,7 @@
 (defvar unicad-best-guess nil
   "(MACHINE-BEST-GUESS BEST-CONFIDENCE)")
 
-(make-variable-buffer-local 'unicad-best-guess)
+;; (make-variable-buffer-local 'unicad-best-guess)
 
 (defvar unicad-singlebyte-best-guess nil)
 
@@ -235,16 +242,21 @@
       (save-excursion
         (let ((end (+ (point) (min size unicad-max-size)))
               (input-state 'ePureAscii)
-              code0 code1 code2 state prober-result
+              (code0 0)
+              prober-result
+              code1 code2 state
               start quick-start quick-end
               )
+          (setq unicad-eof nil)
           (unless (setq prober-result (unicad-bom-detect))
             (goto-char (point-min))
             (while (and (not (eq state 'mDone))
                         (eq input-state 'ePureAscii)
                         (< (point) end))
               (setq code1 (unicad-char-after))
-              (forward-char 1)
+              (forward-char 1)              
+              (if (and (= code0 #x0D) (= code1 #x0A))
+                  (setq unicad-eol 1))
               (if (and (>= code1 #x80)
                        (/= code1 #xA0)) ;; since many Ascii only page contains NBSP
                   ;; we got a non-ascii byte (high-byte)
@@ -299,6 +311,13 @@
 ;;           (message "%S" (current-buffer))
           (unless (coding-system-p prober-result)
             (setq prober-result unicad-default-coding-system))
+          (if (null prober-result) (setq prober-result 'undecided))
+          (when (numberp unicad-eol)
+            (if (null (numberp (coding-system-eol-type prober-result)))
+                (setq prober-result (aref (coding-system-eol-type prober-result) unicad-eol))))
+;;           (if (and unicad-eol (= unicad-eol 1))
+;;               (message "unicad dos.")
+;;             (message "unicad unix/mac."))
           (or prober-result unicad-default-coding-system))))))
 
 (if (>= emacs-major-version 22)
@@ -311,6 +330,8 @@
     (unless coding-system
       (setq coding-system (unicad-universal-charset-detect size)))
     coding-system))
+
+(add-hook 'kill-emacs-hook 'unicad-disable)
 
 ;;}}}
 
@@ -1450,30 +1471,33 @@ chardet and return the best guess."
         (freq-char 0)
         (total-seqs 0)
         (seq-counters [0 0 0 0])
-        code cf order1)
+        (code0 0)
+        code1 cf order1)
     (fillarray seq-counters 0)
     (save-excursion
       (while (and (< (point) end)
                   (eq mState 'eDetecting)
                   (< words unicad-quick-singlebyte-words)
                   )
-        (setq code (unicad-char-after))
+        (setq code1 (unicad-char-after))
         (forward-char)
-        (when (and (>= code #x80) (not meetMSB))
+        (if (and (= code0 #x0D) (= code1 #x0A))
+            (setq unicad-eol 1))        
+        (when (and (>= code1 #x80) (not meetMSB))
           (setq meetMSB t)
           (goto-char word-mark)
-          (setq code (unicad-char-after))
+          (setq code1 (unicad-char-after))
           (forward-char)
           )
         (if (and 
-             (< code #x80)
-             (not (or (and (> code ?a) (< code ?z))
-                      (and (> code ?A) (< code ?Z)))))
+             (< code1 #x80)
+             (not (or (and (> code1 ?a) (< code1 ?z))
+                      (and (> code1 ?A) (< code1 ?Z)))))
             (setq meetMSB nil
                   word-mark (point)
                   words (1+ words)))
         (when meetMSB
-          (setq order1 (aref char2order-map code))          
+          (setq order1 (aref char2order-map code1))          
           (if (< order1 unicad-symbol-cat-order)
               (setq total-char (1+ total-char)))
           (when (< order1 unicad-sample-size)
@@ -1490,7 +1514,8 @@ chardet and return the best guess."
               ))
           (if (> order1 255)
               (setq mState 'eNotMe))
-          (setq order0 order1))))
+          (setq order0 order1))
+        (setq code0 code1)))
     (setq cf (unicad-singlebyte-get-confidence 
               positive-ratio total-char freq-char total-seqs seq-counters))
     (cond
@@ -3641,6 +3666,8 @@ japanese, korean"
         (setq code1 (unicad-char-after))
         (setq codingState (unicad-next-state code1 model))
         (forward-char 1)
+        (if (and (= code0 #x0D) (= code1 #x0A))
+            (setq unicad-eol 1))      
         (cond
          ;; we are interested only in 2-byte
          ((= codingState unicad--eStart)
@@ -3724,7 +3751,7 @@ machine (`unicad-next-state') and get the confidence"
 
 (defun unicad-ucs2be-prober (start end)
   "A simple prober function for utf-16-be. It only counts the
-newline, space, numbers and english letters."
+eol, space, numbers and english letters."
   (let ((mState 'eNotMe)
         (count 0)
         code0 code1)
@@ -3759,7 +3786,7 @@ newline, space, numbers and english letters."
 
 (defun unicad-ucs2le-prober (start end)
   "A simple prober function for utf-16-le. It only counts the
-newline, space, numbers and english letters."
+eol, space, numbers and english letters."
   (let ((mState 'eNotMe)
         (count 0)
         code0 code1)
@@ -4313,7 +4340,8 @@ no validation needed here. State machine has done that"
   (let ((mState 'eDetecting)
         (code0-class 1)                 ; OTH
         (mFreqCounter [0 0 0 0])
-        code1-class code0 code1 freq)
+        (code0 0)
+        code1-class code1 freq)
     (fillarray mFreqCounter 0)
     (save-excursion
       (goto-char start)
@@ -4323,6 +4351,8 @@ no validation needed here. State machine has done that"
                   (< (aref mFreqCounter 3) 2000))
         (setq code1 (unicad-char-after))
         (forward-char 1)
+        (if (and (= code0 #x0D) (= code1 #x0A))
+            (setq unicad-eol 1))        
         (setq code1-class (aref class-table code1))
         (setq freq (aref latin-model
                          (+ (* code0-class class-num)
@@ -4681,6 +4711,8 @@ no validation needed here. State machine has done that"
                   (eq mState 'eDetecting))
         (setq code1 (unicad-char-after))
         (forward-char 1)
+        (if (and (= code0 #x0D) (= code1 #x0A))
+            (setq unicad-eol 1))
         (setq codingState (unicad-next-state code1 model))
         (cond
          ((= codingState unicad--eError)
