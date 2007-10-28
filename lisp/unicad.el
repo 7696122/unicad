@@ -4,7 +4,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
 ;; Author: Qichen Huang <unicad.el@gmail.com>
-;; Time-stamp: <2007-10-28 15:48:19>
+;; Time-stamp: <2007-10-28 16:46:22>
 ;; Version: v1.1.3
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -314,7 +314,9 @@
           (if (null prober-result) (setq prober-result 'undecided))
           (when (numberp unicad-eol)
             (if (null (numberp (coding-system-eol-type prober-result)))
-                (setq prober-result (aref (coding-system-eol-type prober-result) unicad-eol))))
+                (if (and unicad-eol (= unicad-eol 1))
+                    ;; i want to skip unix eol
+                    (setq prober-result (aref (coding-system-eol-type prober-result) unicad-eol)))))
 ;;           (if (and unicad-eol (= unicad-eol 1))
 ;;               (message "unicad dos.")
 ;;             (message "unicad unix/mac."))
