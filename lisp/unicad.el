@@ -3,8 +3,8 @@
 ;;;{{{  Copyright and License
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$	
-;; Author: Qichen Huang <jasonal00@gmail.com>
-;; Time-stamp: <2007-09-05 23:59:12>
+;; Author: Qichen Huang <unicad.el@gmail.com>
+;; Time-stamp: <2007-10-28 15:48:19>
 ;; Version: v1.1.3
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
