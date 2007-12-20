@@ -4,7 +4,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$
 ;; Author: Qichen Huang <unicad.el@gmail.com>
-;; Time-stamp: <2007-12-13 11:43:38>
+;; Time-stamp: <2007-12-20 08:55:37>
 ;; Version: v1.1.4
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -170,10 +170,10 @@
 
 (defvar unicad-singlebyte-group-guess nil)
 
-(defvar unicad-latin-best-guess '(windows-1252 0.0))
+(defvar unicad-latin-best-guess '(latin-1 0.0))
 
 (defvar unicad-latin1-guess
-  '(windows-1252 0.0))
+  '(latin-1 0.0))
 
 (defvar unicad-latin2-guess
   '(latin-2 0.0))
@@ -4343,12 +4343,12 @@ no validation needed here. State machine has done that"
             (unicad-latin-prober start end
                                  unicad-latin1-class-table unicad-latin1-class-num unicad-latin1-model))
       (if (>= latin1-conf 0.5)
-          (setq unicad-latin-best-guess (list 'windows-1252 latin1-conf))
+          (setq unicad-latin-best-guess (list 'latin-1 latin1-conf))
         (setq latin2-conf
               (unicad-latin-prober start end
                                    unicad-latin2-class-table unicad-latin2-class-num unicad-latin2-model))
         (if (> latin1-conf latin2-conf)
-            (setq unicad-latin-best-guess (list 'windows-1252 latin1-conf))
+            (setq unicad-latin-best-guess (list 'latin-1 latin1-conf))
           (setq unicad-latin-best-guess (list 'latin-2 latin2-conf)))))
     (cadr unicad-latin-best-guess)))
 
@@ -4361,7 +4361,7 @@ no validation needed here. State machine has done that"
     (fillarray mFreqCounter 0)
     (save-excursion
       (goto-char start)
-      (setq unicad-latin-best-guess '(windows-1252 0.0))
+      (setq unicad-latin-best-guess '(latin-1 0.0))
       (while (and (< (point) end)
                   (not (eq mState 'eNotMe))
                   (< (aref mFreqCounter 3) 2000))
