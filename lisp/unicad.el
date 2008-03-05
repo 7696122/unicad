@@ -4,7 +4,7 @@
 ;; Copyright (C) 2006, 2007 Qichen Huang
 ;; $Id$
 ;; Author: Qichen Huang <unicad.el@gmail.com>
-;; Time-stamp: <2008-03-05 12:32:16>
+;; Time-stamp: <2008-03-05 13:40:31>
 ;; Version: v1.1.5
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -259,6 +259,7 @@ If optional argument HERE is non-nil, insert string at point."
 ;;       (make-local-variable 'unicad-latin2-guess)
 ;;       (make-local-variable 'unicad-multibyte-group-list)
       (save-excursion
+        (goto-char (point-min))
         (let (;;(end (+ (point) (min size unicad-max-size)))
               (end (min size (+ (point) unicad-max-size)))
               (input-state 'ePureAscii)
