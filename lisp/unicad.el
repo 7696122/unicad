@@ -1,10 +1,10 @@
 ;;; unicad.el --- an elisp port of Mozilla Universal Charset Auto Detector
 
 ;;;{{{  Copyright and License
-;; Copyright (C) 2006, 2007 Qichen Huang
+;; Copyright (C) 2006, 2007, 2008, 2010 Qichen Huang
 ;; $Id$
 ;; Author: Qichen Huang <unicad.el@gmail.com>
-;; Time-stamp: <2008-03-05 13:40:31>
+;; Time-stamp: <2010-04-09 12:53:15>
 ;; Version: v1.1.5
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
@@ -4754,5 +4754,5 @@ no validation needed here. State machine has done that"
 
 ;;; unicad.el ends here
 ;;; Local Variables:
-;;; coding: utf-8
+;;; coding: utf-8-unix
 ;;; End:
