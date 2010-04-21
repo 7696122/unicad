@@ -4,8 +4,8 @@
 ;; Copyright (C) 2006, 2007, 2008, 2010 Qichen Huang
 ;; $Id$
 ;; Author: Qichen Huang <unicad.el@gmail.com>
-;; Time-stamp: <2010-04-21 15:01:48>
-;; Version: v1.1.6
+;; Time-stamp: <2010-04-21 15:07:12>
+;; Version: v1.1.6-beta
 ;; Keywords: coding-system, auto-coding-functions
 ;; URL: http://code.google.com/p/unicad/
 
@@ -143,7 +143,7 @@
 (eval-when-compile
   (require 'cl))
 
-(defvar unicad-version "Unicad v1.1.6")
+(defvar unicad-version "Unicad v1.1.6-beta")
 (defvar unicad-global-enable t)
 (defvar unicad-eol nil)
 (defvar unicad-quick-size 500)
